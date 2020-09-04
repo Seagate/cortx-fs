@@ -1,395 +1,256 @@
 #!/bin/bash
 ###############################################################################
-# Builds script for all CORTXFS components.
-#
-# Dev workflow:
-#   ./scripts/build.sh bootstrap -- Updates sub-modules and external repos.
-#   ./scripts/build.sh config -- Generates out-of-tree cmake build folders
-#   ./scripts/build.sh make -j -- Compiles files in them.
-#   ./scripts/build.sh install -- Generates and installs RPMs for internal
-#                                 components (i.e., does not install NFS Ganesha)
-#
+# Build script for CORTXFS component.
 ###############################################################################
 set -e
 
 ###############################################################################
-###############################################################################
-# CMD Inteface
+# Arguments
 
-cortxfs_cmd_usage() {
-    echo -e "
-Usage $0  [-p <ganesha src path>] [-v <version>] [-b <build>] [-k {cortx|redis}] [-e {cortx|posix}]
+# Project Name.
+PROJECT_NAME_BASE=${PROJECT_NAME_BASE:-"cortx"}
 
-Arguments:
-    -p (optional) Path to an existing NFS Ganesha repository.
-    -v (optional) CORTX FS Source version.
-    -b (optional) CORTX FS Build version.
-    -k (optional) NSAL KVSTORE backend (cortx/redis).
-    -e (optional) DSAL DSTORE backend (cortx/posix).
-    -d (optional) Enable/disable dassert(ON/OFF, default:ON).
+# Install Dir.
+INSTALL_DIR_ROOT=${INSTALL_DIR_ROOT:-"/opt/seagate"}
 
-Examples:
-    $0 -p ~/nfs-ganesha -- Builds CORTXFS with a custom NFS Ganesha
-    $0 -v 1.0.1 -b 99 -- Builds packages with version 1.0.1-99_<commit>.
-    $0 -k redis -- Builds CORTXFS with Redis as a KVS.
-"
-	exit 1;
-}
+# CORTXFS source repo root.
+CORTXFS_SOURCE_ROOT=${CORTXFS_SOURCE_ROOT:-$PWD}
 
-cortxfs_parse_cmd() {
-    while getopts ":b:v:p:k:e:d:" o; do
-        case "${o}" in
-        b)
-            export CORTXFS_BUILD_VERSION="${OPTARG}_$(git rev-parse --short HEAD)"
-            ;;
-        v)
-            export CORTXFS_VERSION=${OPTARG}
-            ;;
-        p)
-            local ganpath="${OPTARG}"
-            if [ -d $ganpath ]; then
-                if [ -d $ganpath/src ] && [ -d $ganpath/.git ] ; then
-                    echo "Found existing NFS Ganesha repo in $ganpath."
-                    export KVSFS_NFS_GANESHA_DIR="$(realpath $ganpath)"
-                elif [ "$(basename $ganpath)" == "src" ] && [ -d $ganpath/../.git ]; then
-                    echo "Found existing NFS Ganesha repo in $ganpath/.."
-                    export KVSFS_NFS_GANESHA_DIR="$(realpath $ganpath/..)"
-                else
-                    if (($(find $ganpath -mindepth 1 -maxdepth 1 | wc -l) != 0 )); then
-                        echo "The directory $ganpath is not empty but does not have NFS Ganesha sources."
-                        echo "Please either specify a correct path to NFS Ganesha repository"
-                        echo "  or allow the script to use the default path."
-                        exit 1
-                    else
-                        echo "The directory $ganpath is empty. NFS Ganesha will be downloaded into it."
-                        export KVSFS_NFS_GANESHA_DIR="$(realpath $ganpath)/nfs-ganesha"
-                    fi
-                fi
-            else
-                echo "The directory $ganpath does not exist."
-                echo "Please either specify a correct path to NFS Ganesha repository"
-                echo "  or allow the script to use the default path."
-                exit 1
-            fi
-            echo "NFS Ganesha repo path: $KVSFS_NFS_GANESHA_DIR"
+# Root folder for out-of-tree builds, i.e. location for the build folder.
+# For superproject builds: it is derived from CORTXFS_BUILD_ROOT (cortxfs/build-cortxfs).
+# For local builds: it is based on $PWD (./build-cortxfs).
+CORTXFS_CMAKE_BUILD_ROOT=${CORTXFS_BUILD_ROOT:-$CORTXFS_SOURCE_ROOT}
 
-            ;;
-        k)
-            export NSAL_KVSTORE_BACKEND=${OPTARG}
-            ;;
-        e)
-            export DSAL_DSTORE_BACKEND=${OPTARG}
-            ;;
-        d)
-            export ENABLE_DASSERT=${OPTARG}
-            ;;
-        *)
-            cortxfs_cmd_usage
-            ;;
-        esac
-    done
-}
+# Select CORTXFS Source Version.
+# Superproject: derived from cortxfs version.
+# Local: taken fron VERSION file.
+CORTXFS_VERSION=${CORTXFS_VERSION:-"$(cat $CORTXFS_SOURCE_ROOT/VERSION)"}
+
+
+# Select CORTXFS Build Version.
+# Superproject: derived from cortxfs version.
+# Local: taken from git rev.
+CORTXFS_BUILD_VERSION=${CORTXFS_BUILD_VERSION:-"$(git rev-parse --short HEAD)"}
+
+# Optional, CORTX-UTILS source location.
+# Superproject: uses pre-defined location.
+# Local: searches in the top-level dir.
+CORTX_UTILS_SOURCE_ROOT=${CORTX_UTILS_SOURCE_ROOT:-"$CORTXFS_SOURCE_ROOT/../utils/c-utils"}
+
+# Optional, CORTX-UTILS build root location
+# Superproject: derived from CORTXFS build root.
+# Local: located inside cortx-utils sources.
+CORTX_UTILS_CMAKE_BUILD_ROOT=${CORTXFS_BUILD_ROOT:-"$CORTXFS_SOURCE_ROOT/../utils/c-utils"}
+
+NSAL_SOURCE_ROOT=${NSAL_SOURCE_ROOT:-"$CORTXFS_SOURCE_ROOT/../nsal"}
+
+NSAL_CMAKE_BUILD_ROOT=${CORTXFS_BUILD_ROOT:-"$CORTXFS_SOURCE_ROOT/../nsal"}
+
+DSAL_SOURCE_ROOT=${DSAL_SOURCE_ROOT:-"$CORTXFS_SOURCE_ROOT/../dsal"}
+
+DSAL_CMAKE_BUILD_ROOT=${CORTXFS_BUILD_ROOT:-"$CORTXFS_SOURCE_ROOT/../dsal"}
 
 ###############################################################################
-# Env
+# Local variables
 
-cortxfs_set_env() {
-    export PROJECT_NAME_BASE="cortx"
-    export KVSFS_SOURCE_ROOT=$PWD/kvsfs-ganesha
-    export NSAL_SOURCE_ROOT=$PWD/nsal
-    export DSAL_SOURCE_ROOT=$PWD/dsal
-    export CORTX_UTILS_SOURCE_ROOT=$PWD/utils/c-utils
+CORTXFS_BUILD=$CORTXFS_CMAKE_BUILD_ROOT/build-cortxfs
+CORTXFS_SRC=$CORTXFS_SOURCE_ROOT/src
 
-    export CORTXFS_SOURCE_ROOT=$PWD/cortxfs
+if [ "x$CORTX_UTILS_SOURCE_ROOT" == "x" ]; then
+CORTX_UTILS_INC="/opt/seagate/cortx/utils/c-utils"
+else
+CORTX_UTILS_INC="$CORTX_UTILS_SOURCE_ROOT/src/include"
+fi
 
-    export CORTXFS_BUILD_ROOT=${CORTXFS_BUILD_ROOT:-/tmp/cortxfs}
-    export CORTXFS_VERSION=${CORTXFS_VERSION:-"$(cat $PWD/VERSION)"}
-    export CORTXFS_BUILD_VERSION=${CORTXFS_BUILD_VERSION:-"$(git rev-parse --short HEAD)"}
+if [ "x$CORTX_UTILS_CMAKE_BUILD_ROOT" == "x" ]; then
+CORTX_UTILS_LIB="/usr/lib64/"
+else
+CORTX_UTILS_LIB="$CORTX_UTILS_CMAKE_BUILD_ROOT/build-cortx-utils"
+fi
 
-    export NSAL_KVSTORE_BACKEND=${NSAL_KVSTORE_BACKEND:-"cortx"}
-    export DSAL_DSTORE_BACKEND=${DSAL_DSTORE_BACKEND:-"cortx"}
+if [ "x$NSAL_SOURCE_ROOT" == "x" ]; then
+NSAL_INC="/usr/include/cortx/nsal"
+else
+NSAL_INC="$NSAL_SOURCE_ROOT/src/include"
+fi
 
-    export KVSFS_NFS_GANESHA_DIR=${KVSFS_NFS_GANESHA_DIR:-$PWD/../nfs-ganesha-cortx}
-    export KVSFS_NFS_GANESHA_BUILD_DIR=${KVSFS_NFS_GANESHA_BUILD_DIR:-$CORTXFS_BUILD_ROOT/build-nfs-ganesha}
-    export ENABLE_DASSERT=${ENABLE_DASSERT:-"ON"}
-    export INSTALL_DIR_ROOT="/opt/seagate"
-}
+if [ "x$NSAL_CMAKE_BUILD_ROOT" == "x" ]; then
+NSAL_LIB="/usr/lib64/"
+else
+NSAL_LIB="$NSAL_CMAKE_BUILD_ROOT/build-nsal"
+fi
 
+if [ "x$DSAL_SOURCE_ROOT" == "x" ]; then
+DSAL_INC="/usr/include/cortx/dsal"
+else
+DSAL_INC="$DSAL_SOURCE_ROOT/src/include"
+fi
+
+if [ "x$DSAL_CMAKE_BUILD_ROOT" == "x" ]; then
+DSAL_LIB="/usr/lib64/"
+else
+DSAL_LIB="$DSAL_CMAKE_BUILD_ROOT/build-dsal"
+fi
+
+###############################################################################
 cortxfs_print_env() {
-    cortxfs_set_env
-    local myenv=(
-	PROJECT_NAME_BASE
-        KVSFS_SOURCE_ROOT
-        NSAL_SOURCE_ROOT
-        DSAL_SOURCE_ROOT
-        CORTX_UTILS_SOURCE_ROOT
-        CORTXFS_BUILD_ROOT
-        CORTXFS_BUILD_VERSION
-        NSAL_KVSTORE_BACKEND
-        DSAL_DSTORE_BACKEND
-        KVSFS_NFS_GANESHA_DIR
-        KVSFS_NFS_GANESHA_BUILD_DIR
+    myenv=(
         CORTXFS_SOURCE_ROOT
-        ENABLE_DASSERT
-	INSTALL_DIR_ROOT
+        CORTXFS_CMAKE_BUILD_ROOT
+        CORTXFS_VERSION
+        CORTXFS_BUILD_VERSION
+        CORTXFS_BUILD
+        CORTXFS_SRC
+	CORTX_UTILS_LIB
+	CORTX_UTILS_INC
+	NSAL_LIB
+	NSAL_INC
+	DSAL_LIB
+	DSAL_INC
     )
+
     for i in ${myenv[@]}; do
         echo "$i=${!i}"
     done
 }
 
 ###############################################################################
-# Builds scripts for sub-modules
-
-_kvsfs_build() {
-    echo "KVSFS_BUILD: $@"
-    $KVSFS_SOURCE_ROOT/scripts/build.sh "$@"
-}
-
-_utils_build() {
-    echo "UTILS_BUILD: $@"
-    $CORTX_UTILS_SOURCE_ROOT/scripts/build.sh "$@"
-}
-
-_nsal_build() {
-    echo "NSAL_BUILD: $@"
-    $NSAL_SOURCE_ROOT/scripts/build.sh "$@"
-}
-
-_dsal_build() {
-    echo "DSAL_BUILD: $@"
-    $DSAL_SOURCE_ROOT/scripts/build.sh "$@"
-}
-
-_cortxfs_build() {
-    echo "CORTXFS_BUILD: $@"
-    $CORTXFS_SOURCE_ROOT/scripts/build.sh "$@"
-}
-
-_nfs_ganesha_build() {
-    echo "NFS_GANESHA_BUILD: $@"
-    ./scripts/build-nfs-ganesha.sh "$@"
-}
-
-###############################################################################
-cortxfs_bootstrap() {
-    cortxfs_set_env
-
-    if [ ! -f $UTILS_SOURCE_ROOT/src/CMakeLists.txt ]; then
-        git submodule update --init --recursive $UTILS_SOURCE_ROOT
-    else
-        echo "Skipping bootstrap for UTILS: $UTILS_SOURCE_ROOT"
-    fi
-
-    if [ ! -f $NSAL_SOURCE_ROOT/src/CMakeLists.txt ]; then
-        git submodule update --init --recursive $NSAL_SOURCE_ROOT
-    else
-        echo "Skipping bootstrap for NSAL: $NSAL_SOURCE_ROOT"
-    fi
-
-    if [ ! -f $DSAL_SOURCE_ROOT/src/CMakeLists.txt ]; then
-	git submodule update --init --recursive $DSAL_SOURCE_ROOT
-    else
-        echo "Skipping bootstrap for DSAL: $DSAL_SOURCE_ROOT"
-    fi
-
-    if [ ! -f $CORTXFS_SOURCE_ROOT/src/CMakeLists.txt ]; then
-        git submodule update --init --recursive $CORTXFS_SOURCE_ROOT
-    else
-        echo "Skipping bootstrap for CORTXFS: $CORTXFS_SOURCE_ROOT"
-    fi
-
-    if [ ! -f $KVSFS_SOURCE_ROOT/src/FSAL/FSAL_KVSFS/CMakeLists.txt ]; then
-        git submodule update --init --recursive $KVSFS_SOURCE_ROOT
-    else
-        echo "Skipping bootstrap for KVSFS: $KVSFS_SOURCE_ROOT"
-    fi
-
-    if [ ! -f $KVSFS_NFS_GANESHA_DIR/src/CMakeLists.txt ]; then
-        _nfs_ganesha_build bootstrap
-    else
-        echo "Skipping bootstrap for NFS Ganesha: $KVSFS_NFS_GANESHA_DIR"
-    fi
-
-}
-
-###############################################################################
-cortxfs_jenkins_build() {
-    local rpms_dir="$HOME/rpmbuild/RPMS/x64_86"
-
-    if ! { cortxfs_parse_cmd "$@" && cortxfs_set_env && cortxfs_print_env; } ; then
-        echo "Failed set env variables"
-        exit 1
-    fi
-
-    if [ ! cortxfs_bootstrap ]; then
-        echo "Failed to get extra git repositories"
-        exit 1
-    fi
-
-    # Remove old build root dir
-    rm -fR $CORTXFS_BUILD_ROOT
-
-    # Remove old packages
-    rm -fR "$rpms_dir/"*.rpm
-
-    mkdir -p $CORTXFS_BUILD_ROOT &&
-        _nfs_ganesha_build config &&
-	_utils_build reconf &&
-	_utils_build make -j all &&
-        _nsal_build reconf &&
-        _nsal_build make -j all &&
-        _dsal_build reconf &&
-        _dsal_build make -j all &&
-	_cortxfs_build reconf &&
-	_cortxfs_build make -j all &&
-        _kvsfs_build reconf &&
-        _kvsfs_build make -j all &&
-        _utils_build rpm-gen &&
-        _nsal_build rpm-gen &&
-        _dsal_build rpm-gen &&
-	_cortxfs_build rpm-gen &&
-        _kvsfs_build rpm-gen &&
-        _kvsfs_build purge &&
-	_cortxfs_build purge &&
-        _nsal_build purge &&
-        _dsal_build purge &&
-    echo "OK"
-}
-
-###############################################################################
 cortxfs_configure() {
-    cortxfs_set_env &&
-    rm -fR "CORTXFS_BUILD_ROOT"
-    mkdir -p "$CORTXFS_BUILD_ROOT" &&
-    _nfs_ganesha_build config &&
-    _utils_build reconf &&
-    _nsal_build reconf &&
-    _dsal_build reconf &&
-    _cortxfs_build reconf &&
-    _kvsfs_build reconf &&
-    echo "OK"
+    if [ -f $CORTXFS_BUILD/.config ]; then
+        echo "Build folder exists. Please remove it."
+        exit 1;
+    fi
+
+    mkdir $CORTXFS_BUILD
+    cd $CORTXFS_BUILD
+
+    local cmd="cmake \
+-DBASE_VERSION:STRING=${CORTXFS_VERSION} \
+-DRELEASE_VER:STRING=${CORTXFS_BUILD_VERSION} \
+-DLIBCORTXUTILS:PATH=${CORTX_UTILS_LIB} \
+-DCORTXUTILSINC:PATH=${CORTX_UTILS_INC} \
+-DLIBNSAL:PATH=${NSAL_LIB} \
+-DNSALINC:PATH=${NSAL_INC} \
+-DLIBDSAL:PATH=${DSAL_LIB} \
+-DDSALINC:PATH=${DSAL_INC} \
+-DENABLE_DASSERT=${ENABLE_DASSERT} \
+-DPROJECT_NAME_BASE:STRING=${PROJECT_NAME_BASE} \
+-DINSTALL_DIR_ROOT:STRING=${INSTALL_DIR_ROOT}
+$CORTXFS_SRC"
+    echo -e "Config:\n $cmd" > $CORTXFS_BUILD/.config
+    echo -e "Env:\n $(cortxfs_print_env)" >> $CORTXFS_BUILD/.config
+    $cmd
+    cd -
 }
 
 ###############################################################################
 cortxfs_make() {
-    cortxfs_set_env &&
-        _utils_build make "$@" &&
-        _nsal_build make "$@" &&
-        _dsal_build make "$@" &&
-	_cortxfs_build make "$@" &&
-        _kvsfs_build make "$@" &&
-    echo "OK"
+    if [ ! -d $CORTXFS_BUILD ]; then
+        echo "Build folder does not exist. Please run 'config'"
+        exit 1;
+    fi
+
+    cd $CORTXFS_BUILD
+    make "$@"
+    cd -
+}
+
+###############################################################################
+cortxfs_purge() {
+    if [ ! -d "$CORTXFS_BUILD" ]; then
+        echo "Nothing to remove"
+        return 0;
+    fi
+
+    rm -fR "$CORTXFS_BUILD"
+}
+
+###############################################################################
+cortxfs_jenkins_build() {
+    cortxfs_print_env && \
+        cortxfs_purge && \
+        cortxfs_configure && \
+        cortxfs_make all rpms && \
+        cortxfs_make clean
+        cortxfs_purge
 }
 
 ###############################################################################
 cortxfs_rpm_gen() {
-    local rpms_dir="$HOME/rpmbuild/RPMS/x64_86"
-
-    rm -fR "$rpms_dir/nfs-ganesha*"
-    rm -fR "$rpms_dir/libntirpc*"
-    rm -fR "$rpms_dir/cortx-utils*"
-    rm -fR "$rpms_dir/cortx-nsal*"
-    rm -fR "$rpms_dir/cortx-dsal*"
-    rm -fR "$rpms_dir/cortx-cfs*"
-    rm -fR "$rpmn_dir/kvsfs-ganesha*"
-
-    cortxfs_set_env &&
-        _nfs_ganesha_build rpm-gen &&
-	_utils_build rpm-gen &&
-        _nsal_build rpm-gen &&
-        _dsal_build rpm-gen &&
-	_cortxfs_build rpm-gen &&
-        _kvsfs_build rpm-gen &&
-    echo "OK"
+    cortxfs_make rpms
 }
 
 cortxfs_rpm_install() {
-    cortxfs_set_env
-    sudo echo "Checking sudo access"
-    _utils_build rpm-install
-    _nsal_build rpm-install
-    _dsal_build rpm-install
-    _cortxfs_build rpm-install
-    _kvsfs_build rpm-install
+    local rpms_dir=$HOME/rpmbuild/RPMS/x86_64
+    local dist=$(rpm --eval '%{dist}')
+    local suffix="${CORTXFS_VERSION}-${CORTXFS_BUILD_VERSION}${dist}.x86_64.rpm"
+    local mypkg=(
+        ${PROJECT_NAME_BASE}-fs
+        ${PROJECT_NAME_BASE}-fs-debuginfo
+        ${PROJECT_NAME_BASE}-fs-devel
+    )
+    local myrpms=()
+
+    for pkg in ${mypkg[@]}; do
+        local rpm_file=$rpms_dir/$pkg-$suffix
+        if [ ! -f $rpm_file ]; then
+            echo "Cannot find RPM file for package "$pkg" ('$rpm_file')"
+            return 1
+        else
+            myrpms+=( $rpm_file )
+        fi
+    done
+
+    echo "Installing the following RPMs:"
+    for rpm in ${myrpms[@]}; do
+        echo "$rpm"
+    done
+
+    sudo yum install -y ${myrpms[@]}
+    local rc=$?
+
+    echo "Done ($rc)."
+    return $rc
 }
 
 cortxfs_rpm_uninstall() {
-    cortxfs_set_env
-    sudo echo "Checking sudo access"
-    _utils_build rpm-uninstall
-    _nsal_build rpm-uninstall
-    _dsal_build rpm-uninstall
-    _cortxfs_build rpm-uninstall
-    _kvsfs_build rpm-uninstall
+    sudo yum remove -y "${PROJECT_NAME_BASE}-fs*"
 }
 
 cortxfs_reinstall() {
-    cortxfs_set_env
-    sudo echo "Checking sudo access"
-
-    _utils_build rpm-gen &&
-    _nsal_build rpm-gen &&
-    _dsal_build rpm-gen &&
-    _cortxfs_build rpm-gen &&
-    _kvsfs_build rpm-gen &&
-    _utils_build rpm-uninstall &&
-    _nsal_build rpm-uninstall &&
-    _dsal_build rpm-uninstall &&
-    _cortxfs_build rpm-uninstall &&
-    _kvsfs_build rpm-uninstall &&
-    _utils_build rpm-install &&
-    _nsal_build rpm-install &&
-    _dsal_build rpm-install &&
-    _cortxfs_build rpm-install &&
-    _kvsfs_build rpm-install
+    cortxfs_rpm_gen &&
+        cortxfs_rpm_uninstall &&
+        cortxfs_rpm_install &&
+    echo "OK"
 }
 
 ###############################################################################
 cortxfs_usage() {
     echo -e "
-CORTXFS Build script.
+NSAL Build script.
 Usage:
     env <build environment> $0 <action>
 
 Where action is one of the following:
-    env     - Show build environment.
-    help    - Print usage.
-    jenkins - Run CI build.
+        help    - Print usage.
+        env     - Show build environment.
+        jenkins - Run automated CI build.
 
-    config  - Delete old build root, run configure, and build local deps.
-    purge   - Clean up all files generated by build/config steps.
+        config  - Run configure step.
+        purge   - Clean up all files generated by build/config steps.
+        reconf  - Clean up build dir and run configure step.
 
-    make    - Run make [...] command.
+        make    - Run make [...] command.
 
-    bootstrap - Fetch recent sub-modules, check local/external build deps.
-    update    - Update existing sub-modules and external sources.
+        reinstall - Build RPMs, remove old pkgs and install new pkgs.
+        rpm-gen - Build RPMs.
+        rpm-install - Install RPMs build by rpm-gen.
+        rpm-uninstall - Uninstall pkgs.
 
-    rpm-gen       - Generate RPMs.
-    rpm-install   - Install the generated RPMs.
-    rpm-uninstall - Uninstall the RPMs.
-    reinstall     - Generate/Uninstall/Install RPMs.
-
-    <component> <action> - Perform action on a sub-component.
-     Available components: kvsfs nfs-ganesha.
-
-Dev workflow:
-    $0 bootstrap -- Download sources for CORTXFS components.
-    $0 update -- (optional) Update sources.
-    $0 config -- Initialize the build folders
-    $0 make -j -- and build binaries from the sources.
-    $0 reinstall -- Install packages.
-
-Sub-component examples:
-    $0 kvsfs make -j -- Build KVSFS only.
-    $0 nfs-ganesha rpm-gen -- Generate NFS Ganesha RPMs.
-
-External sources:
-    NFS Ganesha.
-    CORTXFS needs NFS Ganesha repo to build KVSFS-FSAL module.
-    It also uses a generated config.h file, so that the repo
-    needs to to be configured at least.
-    Default location: $(dirname $PWD)/nfs-ganesha.
+An example of a typical workflow:
+    $0 config -- Generates out-of-tree cmake build folder.
+    $0 make -j -- Compiles files in it.
+    $0 reinstall -- Generates and re-installs RPMs.
 "
 }
 
@@ -398,55 +259,26 @@ case $1 in
     env)
         cortxfs_print_env;;
     jenkins)
-        shift
-        cortxfs_jenkins_build "$@";;
-    bootstrap)
-        cortxfs_bootstrap;;
-
-# Build steps
+        cortxfs_jenkins_build;;
     config)
         cortxfs_configure;;
+    reconf)
+        cortxfs_purge && cortxfs_configure;;
     purge)
         cortxfs_purge;;
     make)
         shift
         cortxfs_make "$@" ;;
-
-# Pkg mmgmt:
+    test)
+        cortxfs_run_tests;;
     rpm-gen)
         cortxfs_rpm_gen;;
     rpm-install)
         cortxfs_rpm_install;;
     rpm-uninstall)
-        cortxfs_rpm_uninstall;;
+       cortxfs_rpm_uninstall;;
     reinstall)
         cortxfs_reinstall;;
-
-# Sub-components:
-    utils)
-        shift
-        cortxfs_set_env
-        _utils_build "$@";;
-    nsal)
-        shift
-        cortxfs_set_env
-        _nsal_build "$@";;
-    dsal)
-        shift
-        cortxfs_set_env
-        _dsal_build "$@";;
-    cortxfs)
-	shift
-	cortxfs_set_env
-	_cortxfs_build "$@";;
-    kvsfs)
-        shift
-        cortxfs_set_env
-        _kvsfs_build "$@";;
-    nfs-ganesha)
-        shift
-        cortxfs_set_env
-        _nfs_ganesha_build "$@";;
     *)
         cortxfs_usage;;
 esac
