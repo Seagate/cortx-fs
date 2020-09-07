@@ -108,6 +108,8 @@ int cfs_endpoint_scan(int (*cfs_scan_cb)(const struct cfs_endpoint_info *info,
 #define CFS_ROOT_INODE 2LL
 #define CFS_ROOT_UID 0
 
+#define ONE_MB (1024 * 1024)
+
 typedef unsigned long long int cfs_ino_t;
 
 #define STAT_MODE_SET   0x001
