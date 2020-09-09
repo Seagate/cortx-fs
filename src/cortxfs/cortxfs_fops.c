@@ -27,50 +27,6 @@
 #include <sys/param.h> /* DEV_SIZE */
 #include "kvtree.h"
 #include <errno.h>
-#include <time.h>
-#include <sys/time.h>
-
-enum update_file_stat_type {
-	UP_ST_WRITE = 1,
-	UP_ST_READ = 2
-};
-
-static int update_file_stat(struct stat *stat, enum update_file_stat_type utype,
-			    off_t size)
-{
-	struct timeval t;
-
-	if (!stat) {
-		return -EINVAL;
-	}
-
-	if (gettimeofday(&t, NULL) != 0) {
-		return -errno;
-	}
-
-	switch (utype) {
-		case UP_ST_WRITE:
-			stat->st_mtim.tv_sec = t.tv_sec;
-			stat->st_mtim.tv_nsec = 1000 * t.tv_usec;
-			stat->st_ctim = stat->st_mtim;
-			if (size > stat->st_size) {
-				stat->st_size = size;
-				stat->st_blocks = (size + DEV_BSIZE - 1) / DEV_BSIZE;
-			}
-			break;
-
-		case UP_ST_READ:
-			stat->st_atim.tv_sec = t.tv_sec;
-			stat->st_atim.tv_nsec = 1000 * t.tv_usec;
-			break;
-
-		default: /* Should not occur */
-			return -EINVAL;
-			break;
-	}
-
-	return 0;
-}
 
 int cfs_creat(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_ino_t *parent,
 	      char *name, mode_t mode, cfs_ino_t *newfile)
@@ -151,52 +107,44 @@ ssize_t cfs_write(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_file_open_t *fd,
 
 	dassert(dstore);
 
-	log_trace("ENTER: ino=%llu fd=%p count=%lu offset=%ld", fd->ino, fd,
-		  count, (long)offset);
-
 	RC_WRAP_LABEL(rc, out, cfs_ino_to_oid, cfs_fs, &fd->ino, &oid);
 
 	RC_WRAP(cfs_access, cfs_fs, cred, &fd->ino, CFS_ACCESS_WRITE);
 
-	RC_WRAP_LABEL(rc, out, dstore_obj_open, dstore, &oid, &obj);
-
-	if (count > ONE_MB)
-	{
-		rc = -EINVAL;
-		goto out;
-	}
-	else if (count == 0)
-	{
+	if (count == 0) {
 		rc = 0;
 		goto out;
 	}
 
 	ssize_t bs = dstore_get_bsize(dstore, &oid);
-	if (bs < 0)
-	{
+	if (bs < 0) {
 		rc = bs;
 		goto out;
 	}
 
-	rc = dstore_io_op_pwrite(obj, offset, count, bs, (char *)buf);
-	if (rc < 0) {
-		goto out;
-	}
+	RC_WRAP_LABEL(rc, out, dstore_obj_open, dstore, &oid, &obj);
+	RC_WRAP_LABEL(rc, out, dstore_pwrite, obj, offset, count,
+		      bs, (char *)buf);
 
 	RC_WRAP(cfs_getattr, cfs_fs, cred, &fd->ino, &stat);
-	RC_WRAP_LABEL(rc, out, update_file_stat, &stat, UP_ST_WRITE, offset + count);
+	RC_WRAP_LABEL(rc, out, cfs_amend_stat, &stat, STAT_MTIME_SET| STAT_CTIME_SET);
+
+	if ((offset+count) > stat.st_size) {
+		stat.st_size = offset+count;
+		stat.st_blocks = (stat.st_size + DEV_BSIZE - 1) / DEV_BSIZE;
+	}
 
 	RC_WRAP_LABEL(rc, out, cfs_kvnode_init, &node, cfs_fs->kvtree, &fd->ino,
 		      &stat);
 	RC_WRAP_LABEL(rc, out, cfs_set_stat, &node);
 	rc = count;
 out:
-	if (obj != NULL)
-	{
+	if (obj != NULL) {
 		dstore_obj_close(obj);
 	}
 	kvnode_fini(&node);
-	log_trace("cfs_write: rc=%d", rc);
+	log_trace("cfs_write: ino=%llu fd=%p count=%lu offset=%ld rc=%d",
+		  fd->ino, fd, count, (long)offset, rc);
 	return rc;
 }
 
@@ -245,7 +193,7 @@ out:
 ssize_t cfs_read(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_file_open_t *fd,
 		 void *buf, size_t count, off_t offset)
 {
-	int rc = 0;
+	int rc;
 	struct stat stat;
 	dstore_oid_t oid;
 	struct dstore *dstore = dstore_get();
@@ -254,54 +202,53 @@ ssize_t cfs_read(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_file_open_t *fd,
 
 	dassert(dstore);
 
-	log_trace("ENTER: ino=%llu fd=%p count=%lu offset=%ld", fd->ino, fd,
-		  count, (long)offset);
-
 	RC_WRAP_LABEL(rc, out, cfs_ino_to_oid, cfs_fs, &fd->ino, &oid);
 	RC_WRAP(cfs_getattr, cfs_fs, cred, &fd->ino, &stat);
 	RC_WRAP(cfs_access, cfs_fs, cred, &fd->ino, CFS_ACCESS_READ);
-	RC_WRAP_LABEL(rc, out, dstore_obj_open, dstore, &oid, &obj);
 
-	if (count > ONE_MB)
-	{
-		rc = -EINVAL;
-		goto out;
-	}
+	/* Following are the cases which needs to be handled to ensure we are
+	 * not reading the data more than data written on file
+	 * 1. If file is empty( i.e: stat->st_size == 0) or count is zero
+	 * return immediately with data read = 0
+	 * 2. If read offset is beyond the data written( i.e: stat->st_size <
+	 * offset from where we are reading) then return immediately with data
+	 * read = 0.
+	 * 3.If amount of data to be read exceed the EOF( i.e: stat->st_size <
+	 * ( offset + buffer_size ) ) then read the only available data with
+	 * read_bytes = available bytes.
+	 * 4. Read is within the written data so read the requested data.
+	 */
 	if (stat.st_size == 0 || stat.st_size < offset || count == 0) {
 		rc = 0;
 		goto out;
-	}
-	else if (stat.st_size <= (offset + count)) {
+	} else if (stat.st_size <= (offset + count)) {
 		/* Let's read only written bytes */
 		count = stat.st_size - offset;
 	}
 
 	ssize_t bs = dstore_get_bsize(dstore, &oid);
-	if (bs < 0)
-	{
+	if (bs < 0) {
 		rc = bs;
 		goto out;
 	}
 
-	rc = dstore_io_op_pread(obj, offset, count, bs, (char *)buf);
+	RC_WRAP_LABEL(rc, out, dstore_obj_open, dstore, &oid, &obj);
+	RC_WRAP_LABEL(rc, out, dstore_pread, obj, offset, count,
+		      bs, (char *)buf);
 
-	if (rc < 0) {
-		goto out;
-	}
-
-	RC_WRAP_LABEL(rc, out, update_file_stat, &stat, UP_ST_READ, 0);
+	RC_WRAP_LABEL(rc, out, cfs_amend_stat, &stat, STAT_ATIME_SET);
 	RC_WRAP_LABEL(rc, out, cfs_kvnode_init, &node, cfs_fs->kvtree, &fd->ino,
 		      &stat);
 	RC_WRAP_LABEL(rc, out, cfs_set_stat, &node);
 	rc = count;
 out:
-	if (obj != NULL)
-	{
+	if (obj != NULL) {
 		dstore_obj_close(obj);
 	}
 
 	kvnode_fini(&node);
-	log_trace("cfs_read rc=%d", rc);
+	log_trace("cfs_read: ino=%llu fd=%p count=%lu offset=%ld rc=%d",
+		  fd->ino, fd, count, (long)offset, rc);
 	return rc;
 }
 
