@@ -6,7 +6,6 @@ the entry point for file access protocols (like NFS, CIFS). CORTXFS makes use
 of NSAL & DSAL libraries to provide the file system framework.
 NSAL library [cortx-nsal repo](https://github.com/Seagate/cortx-nsal) provides
 name space for the file system framework and DSAL library [cortx-dsal repo](https://github.com/Seagate/cortx-dsal) provide data storage functionality for the file system framework.
-Additionally NSAL library is used for storing metadata of the file and directory objects.
 
 ### Disclaimer
 Please refer to the shared disclaimer (https://github.com/Seagate/cortx-posix#disclaimer) about this code repository.
