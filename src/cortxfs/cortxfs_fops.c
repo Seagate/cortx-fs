@@ -154,6 +154,7 @@ int cfs_truncate(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_ino_t *ino,
 	int rc;
 	dstore_oid_t oid;
 	struct dstore *dstore = dstore_get();
+	struct dstore_obj *obj = NULL;
 	struct stat stat;
 	size_t old_size;
 	size_t new_size;
@@ -181,12 +182,13 @@ int cfs_truncate(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_ino_t *ino,
 	RC_WRAP_LABEL(rc, out, cfs_setattr, cfs_fs, cred, ino, new_stat,
 		      new_stat_flags);
 
-
 	RC_WRAP_LABEL(rc, out, cfs_ino_to_oid, cfs_fs, ino, &oid);
-	RC_WRAP_LABEL(rc, out, dstore_obj_resize, dstore, cfs_fs,
-		      &oid, old_size, new_size);
-
+	RC_WRAP_LABEL(rc, out, dstore_obj_open, dstore, &oid, &obj);
+	RC_WRAP_LABEL(rc, out, dstore_obj_resize, obj, old_size, new_size);
 out:
+	if (obj != NULL) {
+		dstore_obj_close(obj);
+	}
 	return rc;
 }
 
