@@ -28,8 +28,9 @@ CORTXFS_VERSION=${CORTXFS_VERSION:-"$(cat $CORTXFS_SOURCE_ROOT/VERSION)"}
 
 
 # Select CORTXFS Build Version.
-# Taken from git rev of cortx-fs repo.
-CORTXFS_BUILD_VERSION=$(git -C $CORTXFS_SOURCE_ROOT rev-parse --short HEAD)
+# Superproject: derived from cortxfs version.
+# Local: taken from git rev.
+CORTXFS_BUILD_VERSION=${CORTXFS_BUILD_VERSION:-"$(git rev-parse --short HEAD)"}
 
 # Optional, CORTX-UTILS source location.
 # Superproject: uses pre-defined location.
