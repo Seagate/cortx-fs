@@ -14,9 +14,10 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  * For any questions about this software or licensing,
- * please email opensource@seagate.com or cortx-questions@seagate.com. 
+ * please email opensource@seagate.com or cortx-questions@seagate.com.
  */
 
+#include "cortxfs_fh.h"
 #include "ut_cortxfs_helper.h"
 
 /**
@@ -79,6 +80,63 @@ static void create_file(void **state)
 			&file_inode);
 
 	ut_assert_int_equal(rc, 0);
+}
+
+/**
+ * Test for verifying file handle and it's implementation
+ * Description: create a file, lookup file handle and derived file handle from
+ * inode value and compare it's internal value.
+ * Strategy:
+ *  1. Create a file.
+ *  2. Lookup for created file, which ultimately do a fH lookup and then extract
+ *     inode from it and return that.
+ *  3. Cross validate the inode number which we got while creating file
+ *  4. As we have inode, get FH from inode
+ *  5. Extract inode from FH, internally stats of file will be accessed to get
+ *     inode number
+ *  6. Cross validate the inode number which we got while creating file
+ *  7. Destroy the file handle, stat attributes of file will be saved down to
+ *     object store.
+ * Expected behavior:
+ *  1. No errors from CORTXFS API.
+ *  2. The lookup should verify file creation and returned inode should match
+ *  3. FH should prove a correctness by returning back correct inode from
+ *     internal stats it hold
+ */
+static void verify_file_handle(void **state)
+{
+	int rc = 0;
+	struct ut_cfs_params *ut_cfs_obj = ENV_FROM_STATE(state);
+	struct cfs_fh *fh = NULL;
+
+	cfs_ino_t file_inode = 0LL;
+	cfs_ino_t file_inode2 = 0LL;
+	cfs_ino_t *file_inode3 = NULL;
+
+	rc = cfs_creat(ut_cfs_obj->cfs_fs, &ut_cfs_obj->cred,
+		       &ut_cfs_obj->current_inode, ut_cfs_obj->file_name, 0755,
+		       &file_inode);
+
+	ut_assert_int_equal(rc, 0);
+
+	rc = cfs_lookup(ut_cfs_obj->cfs_fs, &ut_cfs_obj->cred,
+			&ut_cfs_obj->parent_inode, ut_cfs_obj->file_name,
+			&file_inode2);
+
+	ut_assert_int_equal(rc, 0);
+	ut_assert_int_equal(file_inode, file_inode2);
+
+	cfs_fh_from_ino(ut_cfs_obj->cfs_fs, &file_inode, &fh);
+	ut_assert_not_null(fh);
+	ut_assert_int_equal(rc, 0);
+
+	file_inode3 = cfs_fh_ino(fh);
+	ut_assert_not_null(file_inode3);
+	ut_assert_int_equal(file_inode, *file_inode3);
+
+	if (fh) {
+		cfs_fh_destroy(fh);
+	}
 }
 
 /**
@@ -290,17 +348,21 @@ int main(void)
 	}
 
 	struct test_case test_list[] = {
-		ut_test_case(create_file, create_file_setup, file_test_teardown),
+		ut_test_case(create_file, create_file_setup,
+			     file_test_teardown),
 		ut_test_case(create_longname255_file,
-				create_longname255_file_setup, file_test_teardown),
+			     create_longname255_file_setup, file_test_teardown),
 		ut_test_case(create_exist_file, create_exist_file_setup,
-				file_test_teardown),
+			     file_test_teardown),
+		ut_test_case(verify_file_handle, create_file_setup,
+			     file_test_teardown),
 	};
 
 	int test_count = sizeof(test_list)/sizeof(test_list[0]);
 	int test_failed = 0;
 
-	test_failed = ut_run(test_list, test_count, file_ops_setup, file_ops_teardown);
+	test_failed = ut_run(test_list, test_count, file_ops_setup,
+			     file_ops_teardown);
 
 	ut_fini();
 

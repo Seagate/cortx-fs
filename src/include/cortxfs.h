@@ -320,15 +320,14 @@ int cfs_access(struct cfs_fs *cfs_fs, const cfs_cred_t *cred,
                const cfs_ino_t *ino, int flags);
 
 /** A upper layer callback to be used in cfs_readddir_cb fucntion.
- * @param[in, out] ctx       - Callback state
- * @param[in]     name       - Name of the dentry
- * @param[in]     child_stat - stat attributes of particular dentry to be used
- *                             in callback
+ * @param[in, out] ctx        - Callback state
+ * @param[in]     name        - Name of the dentry
+ * @param[in]     child_inode - inode number of a child
  * @retval true continue iteration.
  * @retval false stop iteration.
  */
 typedef bool (*cfs_readdir_cb_t)(void *ctx, const char *name,
-                                 const struct stat *child_stat);
+                                 cfs_ino_t child_ino);
 
 /* Walk over a directory "dir_ino" and call cb(cb_ctx, entry_name, node) which
  * will make a call to upper layer cb(cb_ctx, entry_name, child_stat) for
@@ -569,6 +568,26 @@ int cfs_link(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_ino_t *ino,
  * NOTE: It does nothing if the object has one or more links.
  */
 int cfs_destroy_orphaned_file(struct cfs_fs *cfs_fs, const cfs_ino_t *ino);
+
+/* Return the reference of the stat attribute for particular file held by given
+ * kvnode, any update to this reference will always be visible inside kvnode
+ * Caller has to make sure before finalization of given kvnode, updated stat has
+ * been written to backend object store
+ * @param[in] node *     - Kvnode pointer which is already initialzed and having
+ *                         stat attributes
+ *
+ * @return - A pointer to stat attribute, this API not suppose to fail
+ */
+struct stat *cfs_get_stat2(const struct kvnode *node);
+
+/* Store the stat associated with particular file inode held by given kvnode
+ *
+ * @param[in] node *    - Kvnode pointer which is already initialized and hold
+ *                        the stat attributes which needs to be stored
+ *
+ * @return - 0 on sucess on failure error code given by kvnode APIs
+ */
+int cfs_set_stat(struct kvnode *node);
 
 /* Xattr APIs */
 /**

@@ -39,6 +39,40 @@ struct cfs_readdir_ctx {
 	void *ctx;
 };
 
+struct stat *cfs_get_stat2(const struct kvnode *node)
+{
+	uint16_t attr_size;
+	struct stat *attr_buff = NULL;
+
+	dassert(node);
+	dassert(node->tree);
+	dassert(node->basic_attr);
+
+	attr_size = kvnode_get_basic_attr_buff(node, (void **)&attr_buff);
+
+	dassert(attr_buff);
+	dassert(attr_size == sizeof(struct stat));
+
+	log_trace("efs_get_stat2: " NODE_ID_F, NODE_ID_P(&node->node_id));
+	return attr_buff;
+}
+
+int cfs_set_stat(struct kvnode *node)
+{
+	int rc;
+
+	dassert(node);
+	dassert(node->tree);
+	dassert(node->basic_attr);
+
+	rc = kvnode_dump(node);
+
+	log_trace("efs_set_stat" NODE_ID_F "rc : %d",
+		  NODE_ID_P(&node->node_id), rc);
+
+	return rc;
+}
+
 int cfs_getattr(struct cfs_fs *cfs_fs, const cfs_cred_t *cred,
 		const cfs_ino_t *ino, struct stat *bufstat)
 {
@@ -152,24 +186,14 @@ out:
 bool cfs_readdir_cb(void *cb_ctx, const char *name, const struct kvnode *node)
 {
 	bool retval = false;
-	int  errcode;
-	struct stat *child_stat = NULL;
-	struct kvstore *kvstor = kvstore_get();
 	struct cfs_readdir_ctx *cb_info = cb_ctx;
+	cfs_ino_t child_inode;
 
-	errcode = cfs_get_stat(node, &child_stat);
-	/* This error code is not propogated to caller as it expect true/false
-	 * and based on that it take the decision to further process the child,
-	 * so the error condtion should be asserted here.
-	 */
-	dassert(errcode == 0);
+	node_id_to_ino(&node->node_id, &child_inode);
+	retval = cb_info->cb(cb_info->ctx, name, child_inode);
 
-	retval = cb_info->cb(cb_info->ctx, name, child_stat);
-
-	kvs_free(kvstor, child_stat);
-
-	log_trace("cfs_readdir_cb:" NODE_ID_F ", errcode=%d, retVal = %d",
-		  NODE_ID_P(&node->node_id), errcode, (int)retval);
+	log_trace("efs_readdir_cb:" NODE_ID_F ", retVal = %d",
+		  NODE_ID_P(&node->node_id), (int)retval);
 
 	return retval;
 }
@@ -248,14 +272,19 @@ int cfs_lookup(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_ino_t *parent,
 	struct cfs_fh *parent_fh = NULL;
 	struct cfs_fh *fh = NULL;
 
-	RC_WRAP_LABEL(rc, out, cfs_fh_from_ino, cfs_fs, parent, NULL, &parent_fh);
+	RC_WRAP_LABEL(rc, out, cfs_fh_from_ino, cfs_fs, parent, &parent_fh);
 	RC_WRAP_LABEL(rc, out, cfs_fh_lookup, cred, parent_fh, name, &fh);
 
 	*ino = *cfs_fh_ino(fh);
 
 out:
-	cfs_fh_destroy(parent_fh);
-	cfs_fh_destroy(fh);
+	if (parent_fh) {
+		cfs_fh_destroy(parent_fh);
+	}
+
+	if (fh) {
+		cfs_fh_destroy(fh);
+	}
 	return rc;
 }
 

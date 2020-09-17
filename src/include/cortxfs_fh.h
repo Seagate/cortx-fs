@@ -14,7 +14,7 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  * For any questions about this software or licensing,
- * please email opensource@seagate.com or cortx-questions@seagate.com. 
+ * please email opensource@seagate.com or cortx-questions@seagate.com.
  */
 
 /* Low-level Design
@@ -22,7 +22,7 @@
  * CORTXFS File Handle Overview.
  * -----------------------------------
  *
- * CORTXFS File Handle (cortxfs)fh) is an in-memory object that represents
+ * CORTXFS File Handle (cortxfs_fh) is an in-memory object that represents
  * a file object such as a regular file, a directory, a symlink etc.
  *
  * File Handles are obtained from the CORTXFS API using LOOKUP, READDIR or
@@ -30,7 +30,7 @@
  * These calls construct a new file handle per found object. READDIR produces
  * a file handle per each iteration over a directory.
  * File Handles cannot be constructed without making calls to the underlying
- * storage (to fetch stat).
+ * storage (to fetch kvnode).
  *
  * Root File Handle is a special file handle that can be constructed by
  * GETROOT call without specifying (parent_inode, dentry_name) pair.
@@ -45,6 +45,8 @@
  *	- per-object read-only attributes (type).
  *	- per-object mutable attributes (mode_t, uid:gid, {a,c,m}time).
  *	- Runtime locks.
+ *	- Access reference count.
+ *	- File state.
  *
  *
  * FH Serialization.
@@ -107,48 +109,73 @@
  * Inplace memorty menagement is not implemented yet and will a part of
  * futher optimizations when CORTXFS FH will be fully integrated in CORTXFS
  * namespace code.
- *
- *
- * FH Compatibility layer.
- * -----------------------
- *
- * Migration to the new CORTXFS FH API requires a lot of changes in CORTXFS and
- * KVSFS. In order to keep backward compatibility during migration,
- * CORTXFS FH provides a set of function to use together new and the old APIs.
- * Those places are marked as "TODO:EOS-3288".
  */
 
 #ifndef CFS_FH_H_
 #define CFS_FH_H_
-/******************************************************************************/
-/* NOTE: This code needs to be merged into cortxfs.h. Otherwise, we will
- * get an unresolvable dependency cycle between cortxfs_fh_t definition and the
- * rest of CORTXFS code.
- */
-/******************************************************************************/
 
+#include "cortxfs.h"
 struct cfs_fh;
 
-/******************************************************************************/
-/* Memory mgmt */
+/* The example of CORTXFS API described below allocates new file handles in
+ * heap. Later we can change that to use in-place allocated structures to
+ * avoid extra malloc/free calls.
+ * The function looks up a directory entry `name` in the given `parent_fh`
+ * directory using `cred` for checking access.
+ * If name and inodes are matching with the parent fh then it will create the
+ * new FH same as parent and return the reference of it.
+ * It returns a new file handle object fh.
+ * @param[in] cred - User credentials.
+ * @param[in] parent_fh - Parent file handle.
+ * @param[in] name - Dentry name.
+ * @param[out] fh - Pointer to a new file handle object.
+ * @return 0 or -errno.
+ */
+int cfs_fh_lookup(const cfs_cred_t *cred,
+                  struct cfs_fh *parent_fh, const char *name,
+                  struct cfs_fh **fh);
 
-/* Release all resources associated with FH and deallocate the memory region
- * allocated for this FH.
+/* Get a root file handle for given filesystem.
+ * The function allocate, initialize it's all members and returns a new file
+ * handle which represent the root directory of `fs` using `cred` for checking
+ * access.
+ * @param[in] fs - Filesystem context.
+ * @param[in[ cred - User credentials.
+ * @param[out] pfh - Pointer to the root FH object.
+ */
+int cfs_fh_getroot(struct cfs_fs *fs, const cfs_cred_t *cred,
+                   struct cfs_fh **pfh);
+
+/* Dump the file attributes(kvnode) associated with a given FH
+ * Release all resources and deallocate the memory region allocted for this FH
+ * @param[in] fh - Any initialized FH.
  */
 void cfs_fh_destroy(struct cfs_fh *fh);
 
-/******************************************************************************/
-/* Properties */
-
-/** Get a pointer to inode numuber of a File Handle.
+/* Get a pointer to inode numuber of a File Handle.
+ * @param[in] fh - Any initialized FH.
  * @return Pointer to internal buffer which holds inode number.
  */
 cfs_ino_t *cfs_fh_ino(struct cfs_fh *fh);
 
-/** Get a pointer to attributes (stat) of a File Handle.
+/* Get a pointer to attributes (stat) of a File Handle.
+ * @param[in] fh - Any initialized FH.
  * @return Pointer to internal buffer which holds struct stat.
  */
-struct stat *cfs_fh_stat(struct cfs_fh *fh);
+struct stat *cfs_fh_stat(const struct cfs_fh *fh);
+
+/* The function allocates a new FH, intializes it's all the members and return
+ * a newly allocated FH.
+ * @param[in] fs - Filesystem context.
+ * @param[in] ino_num - Inode number.
+ * @param[out] pfh - Pointer the created FH object.
+ * @return 0 or -errno.
+ * @TODO: When file handle will be represented by unique 128bit FID, input to
+ * this API will be that which will be used to load/form required paramete to
+ * build FH
+ */
+int cfs_fh_from_ino(struct cfs_fs *fs, const cfs_ino_t *ino_num,
+                    struct cfs_fh **fh);
 
 /******************************************************************************/
 /* Representation */
@@ -177,68 +204,6 @@ void cfs_fh_key(const struct cfs_fh *fh, void **pbuffer, size_t *psize);
  * without recompiling the callers code.
  */
 size_t cfs_fh_serialized_size(void);
-
-/******************************************************************************/
-/* NOTE: This will be a part of the main CORTXFS API but not a part of the FH API. */
-
-/* Notes for reviewers (it will be turned into doxygen comments later) :
- *
- * 1. There is no need for fs_ctx anymore because each FH has a pointer
- * to the file system where the FH is located. It is required because
- * the on-wire FH handle has to be unique across the filesystems.
- * The Object:Filystem pair of FIDs is unique enough and can be easily
- * reconstructed without any additiona information and even might be used
- * outside of CORTXFS.
- *
- * 2. cortxfs_ino_t arguments are replaced by cortxfs_fh_t. Because of that,
- * the callers should ensure to destroy the handles.
- *
- * 3. The example of CORTXFS API described below allocates new file handles in
- * heap. Later we can change that to use in-place allocated structures to
- * avoid extra malloc/free calls.
- */
-
-/** Find a file object in a directory.
- * The function looks up a directory entry `name` in the given `fh`
- * directory using `cred` for checking access.
- * It returns a new file handle object.
- * @param[in] cred - User credentials.
- * @param[in,out] fh - Parent file handle.
- * @param[in] name - Dentry name.
- * @param[out] pfh - Pointer to a new file handle object.
- * @return 0 or -errno.
- */
-int cfs_fh_lookup(const cfs_cred_t *cred, struct cfs_fh *fh, const char *name,
-		  struct cfs_fh **pfh);
-
-/** Get a root file handle for given filesystem.
- * The function returns a new file handle which represents the root
- * directory of `fs` using `cred` for checking access.
- * @param[in,out] fs - Filesystem context.
- * @param[in[ cred - User credentials.
- * @param[out] pfh - Pointer to the root FH object.
- * TODO:
- *	1. `fs` parameter type should be changed to `cortxfs_fs_t` when
- *	the corresponding module is finished.
- */
-int cfs_fh_getroot(struct cfs_fs *fs, const cfs_cred_t *cred, struct cfs_fh **pfh);
-
-/******************************************************************************/
-/* Compatibility layer */
-
-/* A temporary function to be used in CORTXFS if not all the API has been
- * migrated to the new FH API.
- * The function creates a new FH using a combination of a filesystem
- * context, inode number and stat value.
- * @param[in,out] fs - Filesystem context.
- * @param[in] ino_num - Inode number.
- * @param[in, opt] stat - Pointer to stat value. If stat == NULL then the
- *	function makes a GET call to KVSAL to fetch the attributes.
- * @param[out] pfh - Pointer the created FH object.
- * @return 0 or -errno.
- */
-int cfs_fh_from_ino(struct cfs_fs *fs, const cfs_ino_t *ino_num,
-		    const struct stat *stat, struct cfs_fh **fh);
 
 /* A temporary function to be used for serialization until cortxfs_fh_get_fsid
  * is implemented (or until CORTXFS start using FIDs as primary keys).
