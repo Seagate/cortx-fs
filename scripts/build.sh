@@ -26,11 +26,10 @@ CORTXFS_CMAKE_BUILD_ROOT=${CORTXFS_BUILD_ROOT:-$CORTXFS_SOURCE_ROOT}
 # Local: taken fron VERSION file.
 CORTXFS_VERSION=${CORTXFS_VERSION:-"$(cat $CORTXFS_SOURCE_ROOT/VERSION)"}
 
-
 # Select CORTXFS Build Version.
-# Superproject: derived from cortxfs version.
-# Local: taken from git rev.
-CORTXFS_BUILD_VERSION=${CORTXFS_BUILD_VERSION:-"$(git rev-parse --short HEAD)"}
+# Taken from git rev of CORTXFS repo
+GIT_DIR="$CORTXFS_SOURCE_ROOT/.git"
+CORTXFS_BUILD_VERSION="$(git --git-dir "$GIT_DIR" rev-parse --short HEAD)"
 
 # Optional, CORTX-UTILS source location.
 # Superproject: uses pre-defined location.
