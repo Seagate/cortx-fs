@@ -829,6 +829,230 @@ static void create_root_dir(void **state)
 }
 
 /**
+ * Setup for create_remove_subdir setup
+ */
+static int create_remove_subdir_setup(void **state)
+{
+	int rc = 0;
+	struct ut_dir_env *ut_dir_obj = DIR_ENV_FROM_STATE(state);
+
+	ut_dir_obj->name_list[0] = "create_remove_subdir_setup";
+	ut_dir_obj->ut_cfs_obj.file_name = ut_dir_obj->name_list[0];
+	ut_dir_obj->entry_cnt = 1;
+
+	rc = ut_dir_create(state);
+	ut_assert_int_equal(rc, 0);
+
+	return rc;
+}
+
+/**
+ * Test if ctime and mtime changes for parent dir
+ * after creation and removal of child dir.
+ * Strategy:
+ * 1. Getattr of parent dir
+ * 2. create a subdir
+ * 3. getattr of parent dir
+ * 4. check if ctime and mtime changed
+ * for parent dir or not.
+ * 5. delete child dir.
+ * 6. getattr of parent dir.
+ * 7. check if ctime and mtime changed
+ * for parent dir or not.
+ * Expected behavior:
+ * 1. No errors from CORTXFS API
+ * 2. parent dir ctime and mtime should change
+ * after creation and removal of sub dir.
+ */
+
+static void create_remove_subdir(void **state)
+{
+	int rc = 0;
+	struct ut_cfs_params *ut_cfs_obj = ENV_FROM_STATE(state);
+	cfs_ino_t *pinode =  &ut_cfs_obj->file_inode;
+	cfs_ino_t cinode;
+	struct stat before_create;
+	struct stat after_create;
+	struct stat after_rmdir;
+
+	memset(&before_create, 0, sizeof(before_create));
+	rc = cfs_getattr(ut_cfs_obj->cfs_fs, &ut_cfs_obj->cred,
+			 pinode, &before_create);
+	ut_assert_int_equal(rc, 0);
+
+	rc = cfs_mkdir(ut_cfs_obj->cfs_fs, &ut_cfs_obj->cred,
+		       pinode, "childdir", 0755, &cinode);
+	ut_assert_int_equal(rc, 0);
+
+	memset(&after_create, 0, sizeof(after_create));
+	rc = cfs_getattr(ut_cfs_obj->cfs_fs, &ut_cfs_obj->cred,
+			 pinode, &after_create);
+	ut_assert_int_equal(rc, 0);
+
+	/* if ctime after create has not changed than assert */
+	if (after_create.st_ctim.tv_sec == before_create.st_ctim.tv_sec &&
+	    after_create.st_ctim.tv_nsec == before_create.st_ctim.tv_nsec) {
+
+		ut_assert_true(0);
+	}
+
+	/* if mtime after create has not changed than assert */
+	if (after_create.st_mtim.tv_sec == before_create.st_mtim.tv_sec &&
+	    after_create.st_mtim.tv_nsec == before_create.st_mtim.tv_nsec) {
+
+		ut_assert_true(0);
+	}
+
+	rc = cfs_rmdir(ut_cfs_obj->cfs_fs, &ut_cfs_obj->cred,
+		       pinode, "childdir");
+	ut_assert_int_equal(rc, 0);
+
+	memset(&after_rmdir, 0, sizeof(after_rmdir));
+	rc = cfs_getattr(ut_cfs_obj->cfs_fs, &ut_cfs_obj->cred,
+			 pinode, &after_rmdir);
+	ut_assert_int_equal(rc, 0);
+
+	/* if ctime after rmdir has not changed than assert */
+	if (after_rmdir.st_ctim.tv_sec == after_create.st_ctim.tv_sec &&
+	    after_rmdir.st_ctim.tv_nsec == after_create.st_ctim.tv_nsec) {
+
+		ut_assert_true(0);
+	}
+	/* if mtime after rmdir has not changed than assert */
+	if (after_rmdir.st_mtim.tv_sec == after_create.st_mtim.tv_sec &&
+	    after_rmdir.st_mtim.tv_nsec == after_create.st_mtim.tv_nsec) {
+
+		ut_assert_true(0);
+	}
+}
+
+/**
+ * teardown for create_remove_subdir
+ */
+static int create_remove_subdir_teardown(void **state)
+{
+	int rc = 0;
+
+	struct ut_dir_env *ut_dir_obj = DIR_ENV_FROM_STATE(state);
+
+	ut_dir_obj->ut_cfs_obj.file_name = ut_dir_obj->name_list[0];
+	rc = ut_dir_delete(state);
+	assert_int_equal(rc, 0);
+
+	return rc;
+}
+
+/**
+ * setup for link_unlink_file test.
+ */
+static int link_unlink_file_setup(void **state)
+{
+	int rc = 0;
+	struct ut_dir_env *ut_dir_obj = DIR_ENV_FROM_STATE(state);
+
+	ut_dir_obj->name_list[0] = "link_unlink_file_setup";
+	ut_dir_obj->ut_cfs_obj.file_name = ut_dir_obj->name_list[0];
+	ut_dir_obj->entry_cnt = 1;
+
+	rc = ut_dir_create(state);
+	ut_assert_int_equal(rc, 0);
+
+	return rc;
+}
+
+/**
+ * Test if ctime and mtime changes for parent dir
+ * after creation and removal of a file inside dir.
+ * Strategy:
+ * 1. Getattr of parent dir
+ * 2. create a file inside parent dir
+ * 3. getattr of parent dir
+ * 4. check if ctime and mtime changed
+ * for parent dir or not.
+ * 5. delete file.
+ * 6. getattr of parent dir.
+ * 7. check if ctime and mtime changed
+ * for parent dir or not.
+ * Expected behavior:
+ * 1. No errors from CORTXFS API
+ * 2. parent dir ctime and mtime should change
+ * after creation and removal of a file inside it.
+ */
+static void link_unlink_file(void **state)
+{
+	int rc = 0;
+	struct ut_cfs_params *ut_cfs_obj = ENV_FROM_STATE(state);
+	cfs_ino_t *pinode = &ut_cfs_obj->file_inode;;
+	cfs_ino_t cinode;
+	struct stat before_link;
+	struct stat after_link;
+	struct stat after_unlink;
+
+	memset(&before_link, 0, sizeof(before_link));
+	rc = cfs_getattr(ut_cfs_obj->cfs_fs, &ut_cfs_obj->cred,
+			 pinode, &before_link);
+	ut_assert_int_equal(rc, 0);
+
+	rc = cfs_creat(ut_cfs_obj->cfs_fs, &ut_cfs_obj->cred,
+		       pinode, "file1", 0755, &cinode);
+	ut_assert_int_equal(rc, 0);
+
+	memset(&after_link, 0, sizeof(after_link));
+	rc = cfs_getattr(ut_cfs_obj->cfs_fs, &ut_cfs_obj->cred,
+			 pinode, &after_link);
+	ut_assert_int_equal(rc, 0);
+
+	/* if ctime after link has not changed than assert */
+	if (after_link.st_ctim.tv_sec == before_link.st_ctim.tv_sec &&
+	    after_link.st_ctim.tv_nsec == before_link.st_ctim.tv_nsec) {
+
+		ut_assert_true(0);
+	}
+
+	/* if mtime after link has not changed than assert */
+	if (after_link.st_mtim.tv_sec == before_link.st_mtim.tv_sec &&
+	    after_link.st_mtim.tv_nsec == before_link.st_mtim.tv_nsec) {
+
+		ut_assert_true(0);
+	}
+
+	rc = cfs_unlink(ut_cfs_obj->cfs_fs, &ut_cfs_obj->cred,
+			pinode, NULL, "file1");
+	ut_assert_int_equal(rc, 0);
+
+	memset(&after_unlink, 0, sizeof(after_unlink));
+	rc = cfs_getattr(ut_cfs_obj->cfs_fs, &ut_cfs_obj->cred,
+			 pinode, &after_unlink);
+	ut_assert_int_equal(rc, 0);
+
+	/* if ctime after unlink has not changed than assert */
+	if (after_link.st_ctim.tv_sec == after_unlink.st_ctim.tv_sec &&
+	    after_link.st_ctim.tv_nsec == after_unlink.st_ctim.tv_nsec) {
+
+		ut_assert_true(0);
+	}
+	/* if mtime after unlink has not changed than assert */
+	if (after_link.st_mtim.tv_sec == after_unlink.st_mtim.tv_sec &&
+	    after_link.st_mtim.tv_nsec == after_unlink.st_mtim.tv_nsec) {
+
+		ut_assert_true(0);
+	}
+}
+
+static int link_unlink_file_teardown(void **state)
+{
+	int rc = 0;
+
+	struct ut_dir_env *ut_dir_obj = DIR_ENV_FROM_STATE(state);
+
+	ut_dir_obj->ut_cfs_obj.file_name = ut_dir_obj->name_list[0];
+	rc = ut_dir_delete(state);
+	assert_int_equal(rc, 0);
+
+	return rc;
+}
+
+/**
  * Setup for dir_ops test group
  */
 static int dir_ops_setup(void **state)
@@ -911,6 +1135,10 @@ int main(void)
 		ut_test_case(create_current_dir, NULL, NULL),
 		ut_test_case(create_parent_dir, NULL, NULL),
 		ut_test_case(create_root_dir, NULL, NULL),
+		ut_test_case(create_remove_subdir, create_remove_subdir_setup,
+			     create_remove_subdir_teardown),
+		ut_test_case(link_unlink_file, link_unlink_file_setup,
+			     link_unlink_file_teardown),
 	};
 
 	int test_count = sizeof(test_list)/sizeof(test_list[0]);
