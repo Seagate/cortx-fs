@@ -305,22 +305,6 @@ out:
 	return rc;
 }
 
-int cfs_set_stat(struct kvnode *node)
-{
-	int rc = 0;
-
-	dassert(node);
-	dassert(node->tree);
-	dassert(node->basic_attr);
-
-	rc = kvnode_dump(node);
-
-	log_trace("cfs_set_stat" NODE_ID_F "rc : %d",
-		  NODE_ID_P(&node->node_id), rc);
-
-	return rc;
-}
-
 int cfs_del_stat(struct kvnode *node)
 {
 	int rc;

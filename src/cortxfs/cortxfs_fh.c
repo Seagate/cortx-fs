@@ -1,5 +1,5 @@
 /*
- * Filename: cortxfs_fh.h
+ * Filename: cortxfs_fh.c
  * Description: CORTXFS File Handle API implementation.
  *
  * Copyright (c) 2020 Seagate Technology LLC and/or its Affiliates
@@ -14,7 +14,7 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  * For any questions about this software or licensing,
- * please email opensource@seagate.com or cortx-questions@seagate.com. 
+ * please email opensource@seagate.com or cortx-questions@seagate.com.
  */
 
 #include <kvstore.h>
@@ -44,50 +44,52 @@ struct cfs_fh_key {
 	uint64_t file;
 };
 
-/**
- * This is the cortxfs file handle.
- */
 struct cfs_fh {
+	/* In memory representation of a NSAL kvnode which is linked to a
+	 * kvtree. This contains the basic attributes (stats) of a file
+	 */
+	struct kvnode f_node;
+
+	/* A file system context on which file/directory/symlink is created */
 	struct cfs_fs *fs;
 
-	/** Inode number of the FH.
-	 * TODO: will be be eliminated and stat->st_ino used instead
-	 */
-	cfs_ino_t ino;
-
-	/** Attributes of the file handle object.
-	 * Pointer is used here as a reference type but not as
-	 * an optional type, i.e. it must not be NULL.
-	 */
-	struct stat *stat;
-
-	/* A unique key to be used in containers (maps, sets).
-	 * TODO: It will be replaced by fid of the file
-	 * or a combination of FSFid+FileFid.
+	/* TODO: Add FID as an unique key, which will be used in containers
+	 * maps, sets
 	 */
 	struct cfs_fh_key key;
 
-	/* TDB: void *symlik_contents; */
-	/* TODO: Symlink target and any other attributes might be added
-	 * here to avoid unnecessary calls to KVS.
+	/* @TODO: Following things can be implemented
+	 * 1. Add synchronization primitives to resolve the concurrency
+	 *    issue
+	 * 2. Add ref count to know about file handle in use by multiple
+	 *    front ends (eg: NFS, CIFS etc) which help to take decision whether
+	 *    to release FH or not
+	 * 3. Cache system attributes associated with a file
+	 * 4. Add a file state to make certain decision when multiple users
+	 *    are using it, like delete on close
 	 */
-	/* TBD: cortxfs_fid_t fid; */
-	/* TODO: FIDs are not used yet */
 };
 
 /** Initialize an empty invalid FH instance */
-#define CFS_FH_INIT (struct cfs_fh) { .ino = 0 }
+#define CFS_FH_INIT (struct cfs_fh) { .f_node = KVNODE_INIT_EMTPY }
 
 static inline
 bool cfs_fh_invariant(const struct cfs_fh *fh)
 {
+	bool rc = false;
+
 	/* A FH should have
-	 *	- Filesystem pointer set.
-	 *	- Non-Zero Inode (FIXME: add 'ino != 1' as well?)
-	 *	- stat buffer to be set.
+	 *	Filesystem pointer set.
+	 *	File handle kvnode should be initialized properly
+	 *	File handle should have valid inode
 	 */
-	return fh->fs != NULL && fh->ino != 0 && fh->stat != NULL &&
-		fh->stat->st_ino == fh->ino;
+	if (fh->fs != NULL && kvnode_invariant(&fh->f_node)) {
+		struct stat *stat = cfs_fh_stat(fh);
+		cfs_ino_t ino = stat->st_ino;
+		rc = (ino >= CFS_ROOT_INODE);
+	}
+
+	return rc;
 }
 
 struct cfs_fh_serialized {
@@ -95,16 +97,27 @@ struct cfs_fh_serialized {
 	cfs_ino_t ino_num;
 };
 
+struct stat *cfs_fh_stat(const struct cfs_fh *fh)
+{
+	return cfs_get_stat2(&fh->f_node);
+}
+
 static inline
 void cfs_fh_init_key(struct cfs_fh *fh)
 {
-	fh->key.file = fh->ino;
+	struct stat *stat = cfs_fh_stat(fh);
+	fh->key.file = stat->st_ino;
 	fh->key.fs = fh->fs;
 }
 
-/******************************************************************************/
+cfs_ino_t *cfs_fh_ino(struct cfs_fh *fh)
+{
+	struct stat *stat = cfs_fh_stat(fh);
+	return (cfs_ino_t *)&stat->st_ino;
+}
+
 int cfs_fh_from_ino(struct cfs_fs *fs, const cfs_ino_t *ino_num,
-		    const struct stat *stat, struct cfs_fh **fh)
+                    struct cfs_fh **fh)
 {
 	int rc;
 	struct cfs_fh *newfh = NULL;
@@ -113,77 +126,79 @@ int cfs_fh_from_ino(struct cfs_fs *fs, const cfs_ino_t *ino_num,
 
 	dassert(kvstor);
 
+	/* A caller for this API who uses/caches this FH, will be responsible
+	 * for freeing up this FH, caller should be calling cfs_fh_destroy to
+	 * release this FH
+	 */
 	RC_WRAP_LABEL(rc, out, kvs_alloc, kvstor, (void **) &newfh,
 		      sizeof(struct cfs_fh));
+
 	*newfh = CFS_FH_INIT;
-	if (stat == NULL) {
-		RC_WRAP_LABEL(rc, out, cfs_kvnode_load, &node, fs->kvtree,
-			      ino_num);
-		RC_WRAP_LABEL(rc, out, cfs_get_stat, &node, &newfh->stat);
-	} else {
-		RC_WRAP_LABEL(rc, out, kvs_alloc, kvstor,
-			      (void **) &newfh->stat, sizeof(struct stat));
-		memcpy(newfh->stat, stat, sizeof(struct stat));
-	}
-	newfh->ino = *ino_num;
+
+	RC_WRAP_LABEL(rc, out, cfs_kvnode_load, &node, fs->kvtree,
+		      ino_num);
+
+	newfh->f_node = node;
 	newfh->fs = fs;
 	cfs_fh_init_key(newfh);
 	*fh = newfh;
 	newfh = NULL;
-
 out:
-	kvnode_fini(&node);
 	if (unlikely(newfh)) {
 		cfs_fh_destroy(newfh);
 	}
 	return rc;
 }
 
-int cfs_fh_lookup(const cfs_cred_t *cred, struct cfs_fh *fh, const char *name,
-		    struct cfs_fh **pfh)
+int cfs_fh_lookup(const cfs_cred_t *cred, struct cfs_fh *parent_fh,
+                  const char *name, struct cfs_fh **fh)
 {
 	int rc;
 	str256_t kname;
 	struct cfs_fh *newfh = NULL;
+	struct stat *parent_stat = NULL;
 	struct kvstore *kvstor = kvstore_get();
 	struct kvnode node = KVNODE_INIT_EMTPY;
+	cfs_ino_t ino;
 	node_id_t pid, id;
 
-	dassert(cred && fh && name && pfh && kvstor);
+	dassert(cred && parent_fh && name && fh && kvstor);
+
+	parent_stat = cfs_fh_stat(parent_fh);
+	dassert(parent_stat != NULL);
 
 	RC_WRAP_LABEL(rc, out, cfs_access_check,
-		      (cfs_cred_t *) cred, fh->stat, CFS_ACCESS_READ);
+		      (cfs_cred_t *) cred, parent_stat, CFS_ACCESS_READ);
 
-	if ((fh->ino == CFS_ROOT_INODE) && (strcmp(name, "..") == 0)) {
-		*pfh = fh;
-		goto out;
+	if ((parent_stat->st_ino == CFS_ROOT_INODE) &&
+	    (strcmp(name, "..") == 0)) {
+		ino = CFS_ROOT_INODE;
+	} else {
+		str256_from_cstr(kname, name, strlen(name));
+		pid = parent_fh->f_node.node_id;
+
+		RC_WRAP_LABEL(rc, out, kvtree_lookup, parent_fh->fs->kvtree,
+			      &pid, &kname, &id);
+
+		node_id_to_ino(&id, &ino);
 	}
 
-	str256_from_cstr(kname, name, strlen(name));
+	dassert(ino >= CFS_ROOT_INODE);
+
+	RC_WRAP_LABEL(rc, out, cfs_kvnode_load, &node,
+		      parent_fh->fs->kvtree, &ino);
 
 	RC_WRAP_LABEL(rc, out, kvs_alloc, kvstor, (void **) &newfh,
 		      sizeof(struct cfs_fh));
-	*newfh = CFS_FH_INIT;
 
-	RC_WRAP_LABEL(rc, out, ino_to_node_id, &fh->ino, &pid);
-
-	RC_WRAP_LABEL(rc, out, kvtree_lookup, fh->fs->kvtree, &pid, &kname,
-		      &id);
-
-	node_id_to_ino(&id, &newfh->ino);
-	dassert(newfh->ino >= CFS_ROOT_INODE);
-
-	newfh->fs = fh->fs;
-	RC_WRAP_LABEL(rc, out, cfs_kvnode_load, &node, newfh->fs->kvtree,
-		      &newfh->ino);
-	RC_WRAP_LABEL(rc, out, cfs_get_stat, &node, &newfh->stat);
+	newfh->fs = parent_fh->fs;
+	newfh->f_node = node;
 	cfs_fh_init_key(newfh);
-	*pfh = newfh;
+	*fh = newfh;
 	newfh = NULL;
 
 	/* FIXME: Shouldn't we update parent.atime here? */
 out:
-	kvnode_fini(&node);
 	if (newfh) {
 		cfs_fh_destroy(newfh);
 	}
@@ -195,33 +210,31 @@ void cfs_fh_destroy(struct cfs_fh *fh)
 	struct kvstore *kvstor = kvstore_get();
 
 	dassert(kvstor);
+	dassert(cfs_fh_invariant(fh));
 
-	/* support the free() semantic */
 	if (fh) {
-		kvs_free(kvstor, fh->stat);
+		cfs_set_stat(&fh->f_node);
+		kvnode_fini(&fh->f_node);
 		kvs_free(kvstor, fh);
 	}
 }
 
-cfs_ino_t *cfs_fh_ino(struct cfs_fh *fh)
-{
-	return &fh->ino;
-}
-
-struct stat *cfs_fh_stat(struct cfs_fh *fh)
-{
-	return fh->stat;
-}
-
-int cfs_fh_getroot(struct cfs_fs *fs, const cfs_cred_t *cred, struct cfs_fh **pfh)
+int cfs_fh_getroot(struct cfs_fs *fs, const cfs_cred_t *cred,
+                   struct cfs_fh **pfh)
 {
 	int rc;
 	struct cfs_fh *fh = NULL;
+	struct stat *stat = NULL;
 	cfs_ino_t root_ino = CFS_ROOT_INODE;
 
-	RC_WRAP_LABEL(rc, out, cfs_fh_from_ino, fs, &root_ino, NULL, &fh);
+	RC_WRAP_LABEL(rc, out, cfs_fh_from_ino, fs, &root_ino, &fh);
+
+	stat = cfs_fh_stat(fh);
+	dassert(stat != NULL);
+
 	RC_WRAP_LABEL(rc, out, cfs_access_check,
-		      (cfs_cred_t *) cred, fh->stat, CFS_ACCESS_READ);
+		      (cfs_cred_t *) cred, stat, CFS_ACCESS_READ);
+
 	*pfh = fh;
 	fh = NULL;
 
@@ -235,6 +248,7 @@ out:
 int cfs_fh_serialize(const struct cfs_fh *fh, void* buffer, size_t max_size)
 {
 	int rc = 0;
+	struct stat *stat = NULL;
 	struct cfs_fh_serialized data = { .ino_num = 0 };
 
 	dassert(cfs_fh_invariant(fh));
@@ -244,7 +258,9 @@ int cfs_fh_serialize(const struct cfs_fh *fh, void* buffer, size_t max_size)
 		goto out;
 	}
 
-	data.ino_num = fh->ino;
+	stat = cfs_fh_stat(fh);
+	dassert(stat);
+	data.ino_num = (cfs_ino_t)stat->st_ino;
 	/* fsid is ignored */
 
 	memcpy(buffer, &data, sizeof(data));
@@ -276,7 +292,7 @@ int cfs_fh_deserialize(struct cfs_fs *fs,
 
 	/* data.fsid is ignored */
 
-	RC_WRAP_LABEL(rc, out, cfs_fh_from_ino, fs, &data.ino_num, NULL, pfh);
+	RC_WRAP_LABEL(rc, out, cfs_fh_from_ino, fs, &data.ino_num, pfh);
 
 out:
 	return rc;
@@ -291,6 +307,7 @@ int cfs_fh_ser_with_fsid(const struct cfs_fh *fh, uint64_t fsid, void *buffer,
 			 size_t max_size)
 {
 	int rc = 0;
+	struct stat *stat = NULL;
 	struct cfs_fh_serialized data = { .ino_num = 0 };
 
 	dassert(cfs_fh_invariant(fh));
@@ -300,7 +317,9 @@ int cfs_fh_ser_with_fsid(const struct cfs_fh *fh, uint64_t fsid, void *buffer,
 		goto out;
 	}
 
-	data.ino_num = fh->ino;
+	stat = cfs_fh_stat(fh);
+	dassert(stat != NULL);
+	data.ino_num = stat->st_ino;;
 	data.fsid = fsid;
 
 	memcpy(buffer, &data, sizeof(data));

@@ -95,15 +95,6 @@ int cfs_kvnode_init(struct kvnode *node, struct kvtree *tree,
 int cfs_kvnode_load(struct kvnode *node, struct kvtree *tree,
 		    const cfs_ino_t *ino);
 
-/* Store the stat associated with particular file inode held by given kvnode
- *
- * @param[in] node *    - Kvnode pointer which is already initialized and hold
- *                        the stat attributes which needs to be stored
- *
- * @return - 0 on sucess on failure error code given by kvnode APIs
- */
-int cfs_set_stat(struct kvnode *node);
-
 /* Extract the stat attribute for particular file held by given kvnode
  *
  * @param[in] node *     - Kvnode pointer which is already initialzed and having

@@ -14,7 +14,7 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  * For any questions about this software or licensing,
- * please email opensource@seagate.com or cortx-questions@seagate.com. 
+ * please email opensource@seagate.com or cortx-questions@seagate.com.
  */
 
 #include "ut_cortxfs_helper.h"
@@ -36,7 +36,7 @@ struct readdir_ctx {
  * Call-back function for readdir
  */
 static bool test_readdir_cb(void *ctx, const char *name,
-                            const struct stat *stat)
+                            cfs_ino_t child_ino)
 {
 	struct readdir_ctx *readdir_ctx = ctx;
 
