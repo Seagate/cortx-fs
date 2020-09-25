@@ -24,7 +24,8 @@ CORTXFS_CMAKE_BUILD_ROOT=${CORTXFS_BUILD_ROOT:-$CORTXFS_SOURCE_ROOT}
 # Select CORTXFS Source Version.
 # Superproject: derived from cortxfs version.
 # Local: taken fron VERSION file.
-CORTXFS_VERSION=${CORTXFS_VERSION:-"$(cat $CORTXFS_SOURCE_ROOT/VERSION)"}
+CORTXFS_VERSION_TEMP=$(cat "$CORTXFS_SOURCE_ROOT/VERSION")
+CORTXFS_VERSION=${CORTXFS_VERSION:-"$CORTXFS_VERSION_TEMP"}
 
 # Select CORTXFS Build Version.
 # Taken from git rev of CORTXFS repo
@@ -115,41 +116,55 @@ cortxfs_print_env() {
 
 ###############################################################################
 cortxfs_configure() {
-    if [ -f $CORTXFS_BUILD/.config ]; then
+    if [ -f "$CORTXFS_BUILD/.config" ]; then
         echo "Build folder exists. Please remove it."
         exit 1;
     fi
 
-    mkdir $CORTXFS_BUILD
-    cd $CORTXFS_BUILD
+    mkdir "$CORTXFS_BUILD"
+    cd "$CORTXFS_BUILD"
 
     local cmd="cmake \
 -DBASE_VERSION:STRING=${CORTXFS_VERSION} \
 -DRELEASE_VER:STRING=${CORTXFS_BUILD_VERSION} \
--DLIBCORTXUTILS:PATH=${CORTX_UTILS_LIB} \
--DCORTXUTILSINC:PATH=${CORTX_UTILS_INC} \
--DLIBNSAL:PATH=${NSAL_LIB} \
--DNSALINC:PATH=${NSAL_INC} \
--DLIBDSAL:PATH=${DSAL_LIB} \
--DDSALINC:PATH=${DSAL_INC} \
+-DLIBCORTXUTILS:PATH=\"$CORTX_UTILS_LIB\" \
+-DCORTXUTILSINC:PATH=\"$CORTX_UTILS_INC\" \
+-DLIBNSAL:PATH=\"$NSAL_LIB\" \
+-DNSALINC:PATH=\"$NSAL_INC\" \
+-DLIBDSAL:PATH=\"$DSAL_LIB\" \
+-DDSALINC:PATH=\"$DSAL_INC\" \
 -DENABLE_DASSERT=${ENABLE_DASSERT} \
 -DPROJECT_NAME_BASE:STRING=${PROJECT_NAME_BASE} \
 -DINSTALL_DIR_ROOT:STRING=${INSTALL_DIR_ROOT}
 $CORTXFS_SRC"
-    echo -e "Config:\n $cmd" > $CORTXFS_BUILD/.config
-    echo -e "Env:\n $(cortxfs_print_env)" >> $CORTXFS_BUILD/.config
-    $cmd
+
+    echo -e "Config:\n $cmd" > "$CORTXFS_BUILD/.config"
+    echo -e "Env:\n $(cortxfs_print_env)" >> "$CORTXFS_BUILD/.config"
+
+cmake \
+-DBASE_VERSION:STRING="$CORTXFS_VERSION" \
+-DRELEASE_VER:STRING="$CORTXFS_BUILD_VERSION" \
+-DLIBCORTXUTILS:PATH="$CORTX_UTILS_LIB" \
+-DCORTXUTILSINC:PATH="$CORTX_UTILS_INC" \
+-DLIBNSAL:PATH="$NSAL_LIB" \
+-DNSALINC:PATH="$NSAL_INC" \
+-DLIBDSAL:PATH="$DSAL_LIB" \
+-DDSALINC:PATH="$DSAL_INC" \
+-DENABLE_DASSERT="$ENABLE_DASSERT" \
+-DPROJECT_NAME_BASE:STRING="$PROJECT_NAME_BASE" \
+-DINSTALL_DIR_ROOT:STRING="$INSTALL_DIR_ROOT" \
+"$CORTXFS_SRC"
     cd -
 }
 
 ###############################################################################
 cortxfs_make() {
-    if [ ! -d $CORTXFS_BUILD ]; then
+    if [ ! -d "$CORTXFS_BUILD" ]; then
         echo "Build folder does not exist. Please run 'config'"
         exit 1;
     fi
 
-    cd $CORTXFS_BUILD
+    cd "$CORTXFS_BUILD"
     make "$@"
     cd -
 }
