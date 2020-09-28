@@ -559,6 +559,15 @@ int cfs_fs_delete(const str256_t *fs_name)
 	RC_WRAP_LABEL(rc, out, ns_delete, fs->ns);
 	fs->ns = NULL;
 
+	/* Delete root node and then free fs */
+	if (fs->root_node) {
+		free(fs->root_node);
+		fs->root_node = NULL;
+	}
+
+	free(fs);
+	fs = NULL;
+
 out:
 	log_info("fs_name=" STR256_F " rc=%d", STR256_P(fs_name), rc);
 	return rc;
