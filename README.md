@@ -1,6 +1,9 @@
 
 
 # CORTXFS
+
+[![Codacy Badge](https://api.codacy.com/project/badge/Grade/a00c3917c3514e9b94bb8a181ba6db2e)](https://app.codacy.com/gh/Seagate/cortx-fs?utm_source=github.com&utm_medium=referral&utm_content=Seagate/cortx-fs&utm_campaign=Badge_Grade)
+
 CORTXFS is CORTX File System framework on top of cloud object storage. It is
 the entry point for file access protocols (like NFS, CIFS). CORTXFS makes use
 of NSAL & DSAL libraries to provide the file system framework.
