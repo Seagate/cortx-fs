@@ -104,7 +104,7 @@ int cfs_access_check(const cfs_cred_t *cred, const struct stat *stat,
 		     int flags)
 {
 	int check = 0;
-	int i;
+	int i, grp_count;
 	bool grp_match = false;
 
 	if (!stat || !cred)
@@ -115,7 +115,9 @@ int cfs_access_check(const cfs_cred_t *cred, const struct stat *stat,
 		return 0;
 
 	/* Check for matching group in group list */
-	for (i=0; i< cred->total_grps; i++) {
+	grp_count = (cred->total_grps <= CORTXFS_CRED_GRPS) ? \
+		    cred->total_grps : CORTXFS_CRED_GRPS;
+	for (i = 0; i < grp_count; i++) {
 		if (cred->grp_list[i] == stat->st_gid) {
 			grp_match = true;
 			break;
