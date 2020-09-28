@@ -104,6 +104,8 @@ int cfs_access_check(const cfs_cred_t *cred, const struct stat *stat,
 		     int flags)
 {
 	int check = 0;
+	int i;
+	bool grp_match = false;
 
 	if (!stat || !cred)
 		return -EINVAL;
@@ -111,6 +113,14 @@ int cfs_access_check(const cfs_cred_t *cred, const struct stat *stat,
 	/* Root's superpowers */
 	if (cred->uid == CFS_ROOT_UID)
 		return 0;
+
+	/* Check for matching group in group list */
+	for (i=0; i< cred->total_grps; i++) {
+		if (cred->grp_list[i] == stat->st_gid) {
+			grp_match = true;
+			break;
+		}
+	}
 
 	if (cred->uid == stat->st_uid) {
 		/* skip access check of owner for set attribute.*/
@@ -124,7 +134,7 @@ int cfs_access_check(const cfs_cred_t *cred, const struct stat *stat,
 
 		if (flags & CFS_ACCESS_EXEC)
 			check |= STAT_OWNER_EXEC;
-	} else if (cred->gid == stat->st_gid) {
+	} else if ( grp_match || (cred->gid == stat->st_gid)) {
 		if (flags & CFS_ACCESS_READ)
 			check |= STAT_GROUP_READ;
 
