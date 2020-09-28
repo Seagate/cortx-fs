@@ -568,6 +568,11 @@ int cfs_fs_delete(const str256_t *fs_name)
 	free(fs);
 	fs = NULL;
 
+	if (fs_node) {
+		free(fs_node);
+		fs_node = NULL;
+	}
+
 out:
 	log_info("fs_name=" STR256_F " rc=%d", STR256_P(fs_name), rc);
 	return rc;
