@@ -212,15 +212,15 @@ ssize_t cfs_read(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_file_open_t *fd,
 	 * not reading the data more than data written on file
 	 * 1. If file is empty( i.e: stat->st_size == 0) or count is zero
 	 * return immediately with data read = 0
-	 * 2. If read offset is beyond the data written( i.e: stat->st_size <
-	 * offset from where we are reading) then return immediately with data
-	 * read = 0.
+	 * 2. If read offset is beyond/equal to the data written( i.e:
+	 * stat->st_size <= offset from where we are reading) then return
+	 * immediately with data read = 0.
 	 * 3.If amount of data to be read exceed the EOF( i.e: stat->st_size <
 	 * ( offset + buffer_size ) ) then read the only available data with
 	 * read_bytes = available bytes.
 	 * 4. Read is within the written data so read the requested data.
 	 */
-	if (stat.st_size == 0 || stat.st_size < offset || count == 0) {
+	if (stat.st_size == 0 || stat.st_size <= offset || count == 0) {
 		rc = 0;
 		goto out;
 	} else if (stat.st_size <= (offset + count)) {
