@@ -597,6 +597,8 @@ int cfs_rename(struct cfs_fs *cfs_fs, cfs_cred_t *cred,
 			RC_WRAP_LABEL(rc, out, cfs_detach, cfs_fs, cred,
 				      dino_dir, &dino, dname);
 		}
+	} else {
+		ino_to_node_id(dino_dir, &dnode_id);
 	}
 
 	if (rename_inplace) {
@@ -623,7 +625,7 @@ int cfs_rename(struct cfs_fs *cfs_fs, cfs_cred_t *cred,
 		RC_WRAP_LABEL(rc, out, kvtree_attach, cfs_fs->kvtree, &dnode_id,
 			      &new_node_id, &k_dname);
 
-		if(S_ISDIR(s_mode)){
+		if (S_ISDIR(s_mode)) {
 			RC_WRAP_LABEL(rc, out, cfs_update_stat, &snode,
 				      STAT_DECR_LINK);
                         RC_WRAP_LABEL(rc, out, cfs_kvnode_load, &dnode,
@@ -638,7 +640,8 @@ int cfs_rename(struct cfs_fs *cfs_fs, cfs_cred_t *cred,
 		 * previous operations have completed successfully.
 		 */
 		log_trace("Removing detached file (%llu)", dino);
-		RC_WRAP_LABEL(rc, out, cfs_destroy_orphaned_file, cfs_fs, &dino);
+		RC_WRAP_LABEL(rc, out, cfs_destroy_orphaned_file, cfs_fs,
+			      &dino);
 	}
 
 out:
