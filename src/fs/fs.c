@@ -545,29 +545,24 @@ int cfs_fs_delete(const str256_t *fs_name)
 		goto out;
 	}
 
-	RC_WRAP_LABEL(rc, out, cfs_ino_num_gen_fini, fs);
-	RC_WRAP_LABEL(rc, out, kvtree_fini, fs->kvtree);
-
-	/* delete kvtree */
-	RC_WRAP_LABEL(rc, out, kvtree_delete, fs->kvtree);
-	fs->kvtree = NULL;
-
 	/* Remove fs from the cortxfs list */
 	fs_node = container_of(fs, struct cfs_fs_node, cfs_fs);
 	LIST_REMOVE(fs_node, link);
 
+	/* Call fini for all members of fs */
+	RC_WRAP_LABEL(rc, out, cfs_ino_num_gen_fini, fs);
+	RC_WRAP_LABEL(rc, out, kvtree_fini, fs->kvtree);
+	kvnode_fini(fs->root_node);
+
+	/* Free all members of fs */
+	RC_WRAP_LABEL(rc, out, kvtree_delete, fs->kvtree);
+	fs->kvtree = NULL;
 	RC_WRAP_LABEL(rc, out, ns_delete, fs->ns);
 	fs->ns = NULL;
+	tenant_free(fs->tenant);
+	fs->tenant = NULL;
 
-	/* Delete root node and then free fs */
-	if (fs->root_node) {
-		free(fs->root_node);
-		fs->root_node = NULL;
-	}
-
-	free(fs);
-	fs = NULL;
-
+	/* Free fs_node */
 	if (fs_node) {
 		free(fs_node);
 		fs_node = NULL;
