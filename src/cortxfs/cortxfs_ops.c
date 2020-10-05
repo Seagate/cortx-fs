@@ -30,6 +30,7 @@
 #include "cortxfs_internal.h" /* dstore_obj_delete() */
 #include <common.h> /* likely */
 #include "kvtree.h"
+#include "operation.h"
 
 /* Internal cortxfs structure which holds the information given
  * by upper layer in case of readdir operation
@@ -73,8 +74,8 @@ int cfs_set_stat(struct kvnode *node)
 	return rc;
 }
 
-int cfs_getattr(struct cfs_fs *cfs_fs, const cfs_cred_t *cred,
-		const cfs_ino_t *ino, struct stat *bufstat)
+static int __cfs_getattr(struct cfs_fs *cfs_fs, const cfs_cred_t *cred,
+			 const cfs_ino_t *ino, struct stat *bufstat)
 {
 	int rc;
 	struct stat *stat = NULL;
@@ -92,6 +93,21 @@ int cfs_getattr(struct cfs_fs *cfs_fs, const cfs_cred_t *cred,
 out:
 	kvnode_fini(&node);
 	log_debug("ino=%d rc=%d", (int)bufstat->st_ino, rc);
+	return rc;
+}
+
+int cfs_getattr(struct cfs_fs *cfs_fs, const cfs_cred_t *cred,
+		const cfs_ino_t *ino, struct stat *bufstat)
+{
+	size_t rc;
+
+	perfc_trace_inii(PFT_CFS_GETATTR, PEM_CFS_TO_NFS);
+
+	rc = __cfs_getattr(cfs_fs, cred, ino, bufstat);
+
+	perfc_trace_attr(PEA_GETATTR_RES_RC, rc);
+	perfc_trace_finii(PERFC_TLS_POP_DONT_VERIFY);
+
 	return rc;
 }
 
@@ -169,8 +185,8 @@ out:
 	return rc;
 }
 
-int cfs_access(struct cfs_fs *cfs_fs, const cfs_cred_t *cred,
-	       const cfs_ino_t *ino, int flags)
+static int __cfs_access(struct cfs_fs *cfs_fs, const cfs_cred_t *cred,
+			const cfs_ino_t *ino, int flags)
 {
 	int rc = 0;
 	struct stat stat;
@@ -180,6 +196,22 @@ int cfs_access(struct cfs_fs *cfs_fs, const cfs_cred_t *cred,
 	RC_WRAP_LABEL(rc, out, cfs_getattr, cfs_fs, cred, ino, &stat);
 	RC_WRAP_LABEL(rc, out, cfs_access_check, cred, &stat, flags);
 out:
+	return rc;
+}
+
+int cfs_access(struct cfs_fs *cfs_fs, const cfs_cred_t *cred,
+	       const cfs_ino_t *ino, int flags)
+{
+	size_t rc;
+
+	perfc_trace_inii(PFT_CFS_ACCESS, PEM_CFS_TO_NFS);
+	perfc_trace_attr(PEA_ACCESS_FLAGS, flags);
+
+	rc = __cfs_access(cfs_fs, cred, ino, flags);
+
+	perfc_trace_attr(PEA_ACCESS_RES_RC, rc);
+	perfc_trace_finii(PERFC_TLS_POP_DONT_VERIFY);
+
 	return rc;
 }
 
@@ -597,6 +629,8 @@ int cfs_rename(struct cfs_fs *cfs_fs, cfs_cred_t *cred,
 			RC_WRAP_LABEL(rc, out, cfs_detach, cfs_fs, cred,
 				      dino_dir, &dino, dname);
 		}
+	} else {
+		ino_to_node_id(dino_dir, &dnode_id);
 	}
 
 	if (rename_inplace) {
@@ -623,7 +657,7 @@ int cfs_rename(struct cfs_fs *cfs_fs, cfs_cred_t *cred,
 		RC_WRAP_LABEL(rc, out, kvtree_attach, cfs_fs->kvtree, &dnode_id,
 			      &new_node_id, &k_dname);
 
-		if(S_ISDIR(s_mode)){
+		if (S_ISDIR(s_mode)) {
 			RC_WRAP_LABEL(rc, out, cfs_update_stat, &snode,
 				      STAT_DECR_LINK);
                         RC_WRAP_LABEL(rc, out, cfs_kvnode_load, &dnode,
@@ -638,7 +672,8 @@ int cfs_rename(struct cfs_fs *cfs_fs, cfs_cred_t *cred,
 		 * previous operations have completed successfully.
 		 */
 		log_trace("Removing detached file (%llu)", dino);
-		RC_WRAP_LABEL(rc, out, cfs_destroy_orphaned_file, cfs_fs, &dino);
+		RC_WRAP_LABEL(rc, out, cfs_destroy_orphaned_file, cfs_fs,
+			      &dino);
 	}
 
 out:

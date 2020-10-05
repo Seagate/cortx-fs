@@ -27,6 +27,7 @@
 #include <sys/param.h> /* DEV_SIZE */
 #include "kvtree.h"
 #include <errno.h>
+#include "operation.h"
 
 int cfs_creat(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_ino_t *parent,
 	      char *name, mode_t mode, cfs_ino_t *newfile)
@@ -192,8 +193,9 @@ out:
 	return rc;
 }
 
-ssize_t cfs_read(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_file_open_t *fd,
-		 void *buf, size_t count, off_t offset)
+static inline ssize_t __cfs_read(struct cfs_fs *cfs_fs, cfs_cred_t *cred,
+				 cfs_file_open_t *fd, void *buf,
+				 size_t count, off_t offset)
 {
 	int rc;
 	struct stat stat;
@@ -212,15 +214,15 @@ ssize_t cfs_read(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_file_open_t *fd,
 	 * not reading the data more than data written on file
 	 * 1. If file is empty( i.e: stat->st_size == 0) or count is zero
 	 * return immediately with data read = 0
-	 * 2. If read offset is beyond the data written( i.e: stat->st_size <
-	 * offset from where we are reading) then return immediately with data
-	 * read = 0.
+	 * 2. If read offset is beyond/equal to the data written( i.e:
+	 * stat->st_size <= offset from where we are reading) then return
+	 * immediately with data read = 0.
 	 * 3.If amount of data to be read exceed the EOF( i.e: stat->st_size <
 	 * ( offset + buffer_size ) ) then read the only available data with
 	 * read_bytes = available bytes.
 	 * 4. Read is within the written data so read the requested data.
 	 */
-	if (stat.st_size == 0 || stat.st_size < offset || count == 0) {
+	if (stat.st_size == 0 || stat.st_size <= offset || count == 0) {
 		rc = 0;
 		goto out;
 	} else if (stat.st_size <= (offset + count)) {
@@ -251,6 +253,23 @@ out:
 	kvnode_fini(&node);
 	log_trace("cfs_read: ino=%llu fd=%p count=%lu offset=%ld rc=%d",
 		  fd->ino, fd, count, (long)offset, rc);
+	return rc;
+}
+
+ssize_t cfs_read(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_file_open_t *fd,
+		 void *buf, size_t count, off_t offset)
+{
+	size_t rc;
+
+	perfc_trace_inii(PFT_CFS_READ, PEM_CFS_TO_NFS);
+	perfc_trace_attr(PEA_R_C_COUNT, count);
+	perfc_trace_attr(PEA_R_C_OFFSET, offset);
+
+	rc = __cfs_read(cfs_fs, cred, fd, buf, count, offset);
+
+	perfc_trace_attr(PEA_R_C_RES_RC, rc);
+	perfc_trace_finii(PERFC_TLS_POP_VERIFY);
+
 	return rc;
 }
 

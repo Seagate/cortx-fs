@@ -169,9 +169,13 @@ enum cfs_file_type {
 	CFS_FT_SYMLINK = 3
 };
 
+/* Number of groups supported by CORTXFS */
+#define CORTXFS_CRED_GRPS 16
 typedef struct cfs_cred__ {
-        uid_t uid;
-        gid_t gid;
+	uid_t uid;
+	gid_t gid;
+	uint16_t total_grps;
+	gid_t grp_list[CORTXFS_CRED_GRPS];
 } cfs_cred_t;
 
 int cfs_access_check(const cfs_cred_t *cred, const struct stat *stat,

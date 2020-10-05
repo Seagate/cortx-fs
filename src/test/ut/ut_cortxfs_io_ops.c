@@ -14,7 +14,7 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  * For any questions about this software or licensing,
- * please email opensource@seagate.com or cortx-questions@seagate.com. 
+ * please email opensource@seagate.com or cortx-questions@seagate.com.
  */
 
 #include "ut_cortxfs_helper.h"
@@ -141,7 +141,7 @@ static void test_w_nonexist_file(void **state)
 
 /**
  * Test for read write single block
- * Description: Write a block , read a block
+ * Description: Write a block, read a block
  * Strategy:
  *  1. Write first block of file.
  *  2. Read first block of file
@@ -165,7 +165,7 @@ static void test_rw_4k(void **state)
 
 	rc = cfs_write(ut_cfs_obj->cfs_fs, &ut_cfs_obj->cred, &fd,
 			ut_io_obj->buf_in, BLOCK_SIZE, 0);
-	
+
 	ut_assert_int_equal(rc, BLOCK_SIZE);
 	rc = 0;
 
@@ -182,6 +182,46 @@ static void test_rw_4k(void **state)
 	free(buf_out);
 }
 
+/**
+ * This test will validate the scenario where we tried to read from EOF
+ * Test will write one block of data and read 1 block offset start from EOF
+ *
+ * Strategy:
+ *  1. Write first block of file.
+ *  2. Read second block of file, i.e start from EOF
+ * Expected Behavior:
+ *  1. No errors from CORTXFS API.
+ *  2. There shouldn't be any read and rc should be 0
+ */
+static void test_read_start_from_EOF(void **state)
+{
+	int rc = 0;
+	char *buf_out;
+	cfs_file_open_t fd;
+
+	struct ut_io_env *ut_io_obj = IO_ENV_FROM_STATE(state);
+	struct ut_cfs_params *ut_cfs_obj = &ut_io_obj->ut_cfs_obj;
+
+	fd.ino = ut_cfs_obj->file_inode;
+
+	buf_out = calloc(sizeof(char), BLOCK_SIZE);
+	ut_assert_not_null(buf_out);
+
+	rc = cfs_write(ut_cfs_obj->cfs_fs, &ut_cfs_obj->cred, &fd,
+			ut_io_obj->buf_in, BLOCK_SIZE, 0);
+
+	ut_assert_int_equal(rc, BLOCK_SIZE);
+	rc = 0;
+
+	// Issue read from starting from EOF boundary
+	rc = cfs_read(ut_cfs_obj->cfs_fs, &ut_cfs_obj->cred, &fd, buf_out,
+			BLOCK_SIZE, BLOCK_SIZE);
+
+	// Should not be reading anything
+	ut_assert_int_equal(rc, 0);
+
+	free(buf_out);
+}
 /**
  * Test for re-write single block
  * Description: Re-wrrite a block , read  block
@@ -444,6 +484,8 @@ int main(void)
 		ut_test_case(test_r_nonexist_file, NULL, NULL),
 		ut_test_case(test_w_nonexist_file, NULL, NULL),
 		ut_test_case(test_rw_4k, io_test_setup, io_test_teardown),
+		ut_test_case(test_read_start_from_EOF, io_test_setup,
+			     io_test_teardown),
 		ut_test_case(test_rewrite, io_test_setup, io_test_teardown),
 		ut_test_case(test_rw_4k_unalinged, io_test_setup,
 				io_test_teardown),
