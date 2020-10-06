@@ -40,8 +40,8 @@ LIST_HEAD(list, cfs_fs_node) fs_list = LIST_HEAD_INITIALIZER();
 /* global endpoint operations for cortxfs*/
 static const struct cfs_endpoint_ops *g_e_ops;
 
-int fs_node_init(struct cfs_fs_node *fs_node, struct namespace *ns,
-		 size_t ns_size)
+static int fs_node_init(struct cfs_fs_node *fs_node,
+			struct namespace *ns, size_t ns_size)
 {
 	int rc = 0;
 
@@ -50,7 +50,7 @@ int fs_node_init(struct cfs_fs_node *fs_node, struct namespace *ns,
 
 	fs_node->cfs_fs.ns = calloc(1, ns_size);
 	if (fs_node->cfs_fs.ns == NULL) {
-		goto ns_alloc_fail;
+		goto out;
 	}
 
 	memcpy(fs_node->cfs_fs.ns, ns, ns_size);
@@ -87,7 +87,7 @@ int fs_node_init(struct cfs_fs_node *fs_node, struct namespace *ns,
 		goto kvnode_load_fail;
 	}
 
-	return rc;
+	goto out;
 
 kvnode_load_fail:
 	free(fs_node->cfs_fs.root_node);
@@ -97,7 +97,11 @@ kvtree_init_fail:
 	free(fs_node->cfs_fs.kvtree);
 kvtree_alloc_fail:
 	free(fs_node->cfs_fs.ns);
-ns_alloc_fail:
+out:
+	if (rc != -ENOMEM) {
+		log_info("fs node initialization completed for fs_name=" STR256_F 
+			 " rc=%d", STR256_P(fs_name), rc);
+	}
 	return rc;
 }
 
@@ -394,7 +398,9 @@ delete_ns:
 free_fs_node:
 	free(fs_node);
 out:
-	log_info("fs_name=" STR256_F " rc=%d", STR256_P(fs_name), rc);
+	if (rc != -ENOMEM) {
+		log_info("fs_name=" STR256_F " rc=%d", STR256_P(fs_name), rc);
+	}
         return rc;
 }
 
@@ -517,19 +523,18 @@ int cfs_fs_delete(const str256_t *fs_name)
 		goto out;
 	}
 
-	RC_WRAP_LABEL(rc, out, cfs_ino_num_gen_fini, fs);
-	RC_WRAP_LABEL(rc, out, kvtree_fini, fs->kvtree);
-
-	/* delete kvtree */
-	RC_WRAP_LABEL(rc, out, kvtree_delete, fs->kvtree);
-	fs->kvtree = NULL;
-
-	/* Remove fs from the cortxfs list */
+	/* Remove fs and its entries from the cortxfs list */
 	fs_node = container_of(fs, struct cfs_fs_node, cfs_fs);
 	LIST_REMOVE(fs_node, link);
-
+	RC_WRAP_LABEL(rc, out, cfs_ino_num_gen_fini, fs);
+	RC_WRAP_LABEL(rc, out, kvtree_fini, fs->kvtree);
+	kvnode_fini(fs->root_node);
+	RC_WRAP_LABEL(rc, out, kvtree_delete, fs->kvtree);
 	RC_WRAP_LABEL(rc, out, ns_delete, fs->ns);
-	fs->ns = NULL;
+
+	tenant_free(fs->tenant);
+	free(fs_node->cfs_fs.root_node);
+	free(fs_node);
 
 out:
 	log_info("fs_name=" STR256_F " rc=%d", STR256_P(fs_name), rc);
