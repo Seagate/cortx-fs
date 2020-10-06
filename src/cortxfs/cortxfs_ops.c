@@ -79,19 +79,23 @@ static int __cfs_getattr(struct cfs_fs *cfs_fs, const cfs_cred_t *cred,
 {
 	int rc;
 	struct stat *stat = NULL;
-	struct kvstore *kvstor = kvstore_get();
-	struct kvnode node = KVNODE_INIT_EMTPY;
+	struct cfs_fh *fh = NULL;
 
-	dassert(cred != NULL);
-	dassert(ino != NULL);
-	dassert(kvstor != NULL);
+	dassert(cfs_fs && cred && ino && bufstat);
 
-	RC_WRAP_LABEL(rc, out, cfs_kvnode_load, &node, cfs_fs->kvtree, ino);
-	RC_WRAP_LABEL(rc, out, cfs_get_stat, &node, &stat);
+	/* TODO: Should get rid of creating and destroying FH operation in this
+	 * API when caller pass the valid FH instead of inode number
+	 */
+	RC_WRAP_LABEL(rc, out, cfs_fh_from_ino, cfs_fs, ino, &fh);
+
+	stat = cfs_fh_stat(fh);
+
 	memcpy(bufstat, stat, sizeof(struct stat));
-	kvs_free(kvstor, stat);
 out:
-	kvnode_fini(&node);
+	if (fh != NULL) {
+		cfs_fh_destroy(fh);
+	}
+
 	log_debug("ino=%d rc=%d", (int)bufstat->st_ino, rc);
 	return rc;
 }
@@ -114,15 +118,13 @@ int cfs_getattr(struct cfs_fs *cfs_fs, const cfs_cred_t *cred,
 int cfs_setattr(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_ino_t *ino,
 		struct stat *setstat, int statflag)
 {
-	struct stat bufstat;
-	struct kvnode node = KVNODE_INIT_EMTPY;
+	struct cfs_fh *fh = NULL;
+	struct stat *stat = NULL;
 	struct timeval t;
 	mode_t ifmt;
 	int rc;
 
-	dassert(cred != NULL);
-	dassert(setstat != NULL);
-	dassert(ino != NULL);
+	dassert(cfs_fs && cred && ino && setstat);
 
 	if (statflag == 0) {
 		rc = 0;
@@ -133,28 +135,36 @@ int cfs_setattr(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_ino_t *ino,
 	rc = gettimeofday(&t, NULL);
 	dassert(rc == 0);
 
-	RC_WRAP_LABEL(rc, out, cfs_getattr, cfs_fs, cred, ino, &bufstat);
-	RC_WRAP_LABEL(rc, out, cfs_access, cfs_fs, cred, ino, CFS_ACCESS_SETATTR);
+	/* TODO: Should get rid of creating and destroying FH operation in this
+	 * API when caller pass the valid FH instead of inode number
+	 */
+	RC_WRAP_LABEL(rc, out, cfs_fh_from_ino, cfs_fs, ino, &fh);
+
+	stat = cfs_fh_stat(fh);
+
+	RC_WRAP_LABEL(rc, out, cfs_access_check, cred, stat,
+		      CFS_ACCESS_SETATTR);
+
 	/* ctime is to be updated if md are changed */
-	bufstat.st_ctim.tv_sec = t.tv_sec;
-	bufstat.st_ctim.tv_nsec = 1000 * t.tv_usec;
+	stat->st_ctim.tv_sec = t.tv_sec;
+	stat->st_ctim.tv_nsec = 1000 * t.tv_usec;
 
 	if (statflag & STAT_MODE_SET) {
-		ifmt = bufstat.st_mode & S_IFMT;
-		bufstat.st_mode = setstat->st_mode | ifmt;
+		ifmt = stat->st_mode & S_IFMT;
+		stat->st_mode = setstat->st_mode | ifmt;
 	}
 
 	if (statflag & STAT_UID_SET) {
-		bufstat.st_uid = setstat->st_uid;
+		stat->st_uid = setstat->st_uid;
 	}
 
 	if (statflag & STAT_GID_SET) {
-		bufstat.st_gid = setstat->st_gid;
+		stat->st_gid = setstat->st_gid;
 	}
 
 	if (statflag & STAT_SIZE_SET) {
-		bufstat.st_size = setstat->st_size;
-		bufstat.st_blocks = setstat->st_blocks;
+		stat->st_size = setstat->st_size;
+		stat->st_blocks = setstat->st_blocks;
 	}
 
 	if (statflag & STAT_SIZE_ATTACH) {
@@ -162,25 +172,25 @@ int cfs_setattr(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_ino_t *ino,
 	}
 
 	if (statflag & STAT_ATIME_SET) {
-		bufstat.st_atim.tv_sec = setstat->st_atim.tv_sec;
-		bufstat.st_atim.tv_nsec = setstat->st_atim.tv_nsec;
+		stat->st_atim.tv_sec = setstat->st_atim.tv_sec;
+		stat->st_atim.tv_nsec = setstat->st_atim.tv_nsec;
 	}
 
 	if (statflag & STAT_MTIME_SET) {
-		bufstat.st_mtim.tv_sec = setstat->st_mtim.tv_sec;
-		bufstat.st_mtim.tv_nsec = setstat->st_mtim.tv_nsec;
+		stat->st_mtim.tv_sec = setstat->st_mtim.tv_sec;
+		stat->st_mtim.tv_nsec = setstat->st_mtim.tv_nsec;
 	}
 
 	if (statflag & STAT_CTIME_SET) {
-		bufstat.st_ctim.tv_sec = setstat->st_ctim.tv_sec;
-		bufstat.st_ctim.tv_nsec = setstat->st_ctim.tv_nsec;
+		stat->st_ctim.tv_sec = setstat->st_ctim.tv_sec;
+		stat->st_ctim.tv_nsec = setstat->st_ctim.tv_nsec;
 	}
 
-	RC_WRAP_LABEL(rc, out, cfs_kvnode_init, &node, cfs_fs->kvtree, ino,
-		      &bufstat);
-	RC_WRAP_LABEL(rc, out, cfs_set_stat, &node);
 out:
-	kvnode_fini(&node);
+	if (fh != NULL) {
+		cfs_fh_destroy(fh);
+	}
+
 	log_debug("rc=%d", rc);
 	return rc;
 }
