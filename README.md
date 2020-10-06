@@ -14,7 +14,7 @@ name space for the file system framework and DSAL library [cortx-dsal repo](http
 Please refer to the shared disclaimer (https://github.com/Seagate/cortx-posix#disclaimer) about this code repository.
 
 ### Know more about CORTXFS
-Refer to the [CORTXFS Quickstart Guide](./doc/CortxFsQuickStart.md) to know more about CORTXFS.
+Refer to the [CORTXFS Quickstart Guide](./doc/CortxFSQuickStart.md) to know more about CORTXFS.
 
 ### Contribute to CORTXFS
 We welcome all Source Code and Documentation contributions to the CORTXFS
