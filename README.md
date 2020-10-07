@@ -2,7 +2,7 @@
 
 # CORTXFS
 
-[![Codacy Badge](https://api.codacy.com/project/badge/Grade/a00c3917c3514e9b94bb8a181ba6db2e)](https://app.codacy.com/gh/Seagate/cortx-fs?utm_source=github.com&utm_medium=referral&utm_content=Seagate/cortx-fs&utm_campaign=Badge_Grade)
+[![Codacy Badge](https://api.codacy.com/project/badge/Grade/a00c3917c3514e9b94bb8a181ba6db2e)](https://app.codacy.com/gh/Seagate/cortx-fs?utm_source=github.com&utm_medium=referral&utm_content=Seagate/cortx-fs&utm_campaign=Badge_Grade) [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://github.com/Seagate/cortx-fs/blob/main/LICENSE) [![Slack](https://img.shields.io/badge/chat-on%20Slack-blue")](https://join.slack.com/t/cortxcommunity/shared_invite/zt-femhm3zm-yiCs5V9NBxh89a_709FFXQ?)
 
 CORTXFS is CORTX File System framework on top of cloud object storage. It is
 the entry point for file access protocols (like NFS, CIFS). CORTXFS makes use
