@@ -6,7 +6,7 @@ that it is suitable for file access protocols like NFS, CIFS.
 CORTXFS interacts with NSAL and DSAL libraries to provide file system like
 infrastructure.
 
-### Acrhitectural overview
+### Architectural overview
 ![CORTXFS Architecture](../images/cortxfs-arch.jpg)
 
 NSAL (Name Space Abstraction Layer) provides a way to create a global name
