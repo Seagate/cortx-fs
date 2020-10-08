@@ -69,7 +69,7 @@ static int fs_node_init(struct cfs_fs_node *fs_node,
 		goto kvtree_init_fail;
 	}
 
-	fs_node->cfs_fs.root_node = malloc(sizeof(struct kvnode));
+	fs_node->cfs_fs.root_node = calloc(1, sizeof(struct kvnode));
 	if (!fs_node->cfs_fs.root_node) {
 		rc = -ENOMEM;
 		goto kvnode_alloc_fail;
@@ -99,7 +99,7 @@ kvtree_alloc_fail:
 	free(fs_node->cfs_fs.ns);
 out:
 	if (rc != -ENOMEM) {
-		log_info("fs node initialization completed for fs_name=" STR256_F 
+		log_info("fs node initialization result for fs_name=" STR256_F 
 			 " rc=%d", STR256_P(fs_name), rc);
 	}
 	return rc;
@@ -179,7 +179,7 @@ void fs_ns_scan_cb(struct namespace *ns, size_t ns_size)
 	fs_node = calloc(1, sizeof(struct cfs_fs_node));
 	if (fs_node == NULL) {
 		rc = -ENOMEM;
-	    goto out;
+		goto out;
 	}
 
 	rc = fs_node_init(fs_node, ns, ns_size);
