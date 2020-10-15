@@ -146,17 +146,39 @@ int cfs_fh_lookup(const cfs_cred_t *cred,
 int cfs_fh_getroot(struct cfs_fs *fs, const cfs_cred_t *cred,
                    struct cfs_fh **pfh);
 
-/* Dump the file attributes(kvnode) associated with a given FH
+/* Note: As of now, destroying FH does not update the stats in backend because
+ * those are stale, the reason for that is FH is not supplied as input param to
+ * each of the cortxfs API which can modify the stats of file directly in FH.
+ * TODO: Temp_FH_op - to be removed
+ * Uncomment the logic to dump the stats associated with FH once FH is present
+ * everywhere all the update happens to FH
+ * Dump the file attributes(kvnode) associated with a given FH
  * Release all resources and deallocate the memory region allocted for this FH
  * @param[in] fh - Any initialized FH.
  */
 void cfs_fh_destroy(struct cfs_fh *fh);
+
+/* Note: This is a temporary API and shall be removed once FH is given as input
+ * to all the operation in FS and all the updates(like stats of file) happens
+ * to the FH
+ * TODO: Temp_FH_op - to be removed
+ * Dump the file attributes(kvnode) associated with a given FH
+ * Release all resources and deallocate the memory region allocted for this FH
+ * @param[in] fh - Any initialized FH.
+ */
+void cfs_fh_destroy_and_dump_stat(struct cfs_fh *fh);
 
 /* Get a pointer to inode numuber of a File Handle.
  * @param[in] fh - Any initialized FH.
  * @return Pointer to internal buffer which holds inode number.
  */
 cfs_ino_t *cfs_fh_ino(struct cfs_fh *fh);
+
+/* Get a pointer to file system context from a File Handle.
+ * @param[in] fh - Any initialized FH.
+ * @return Pointer to FS context.
+ */
+struct cfs_fs *cfs_fs_from_fh(const struct cfs_fh *fh);
 
 /* Get a pointer to attributes (stat) of a File Handle.
  * @param[in] fh - Any initialized FH.
