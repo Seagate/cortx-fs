@@ -29,6 +29,7 @@
 #include <common.h> /* unlikely */
 #include <common/log.h> /* log_err() */
 #include "kvtree.h" /* kvtree_lookup() */
+#include "operation.h" /* perf tracepoints */
 
 /**
  * A unique key to be used in containers (maps, sets).
@@ -159,8 +160,9 @@ out:
 	return rc;
 }
 
-int cfs_fh_lookup(const cfs_cred_t *cred, struct cfs_fh *parent_fh,
-                  const char *name, struct cfs_fh **fh)
+static inline int __cfs_fh_lookup(const cfs_cred_t *cred,
+				  struct cfs_fh *parent_fh,
+				  const char *name, struct cfs_fh **fh)
 {
 	int rc;
 	str256_t kname;
@@ -212,6 +214,18 @@ out:
 	if (newfh) {
 		cfs_fh_destroy(newfh);
 	}
+	return rc;
+}
+
+int cfs_fh_lookup(const cfs_cred_t *cred, struct cfs_fh *parent_fh,
+                const char *name, struct cfs_fh **fh)
+{
+	int rc;
+
+	perfc_trace_inii(PFT_CFS_LOOKUP, PEM_CFS_TO_NFS);
+	rc = __cfs_fh_lookup(cred, parent_fh, name, fh);
+	perfc_trace_finii(PERFC_TLS_POP_VERIFY);
+
 	return rc;
 }
 
