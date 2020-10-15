@@ -14,7 +14,7 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  * For any questions about this software or licensing,
- * please email opensource@seagate.com or cortx-questions@seagate.com. 
+ * please email opensource@seagate.com or cortx-questions@seagate.com.
  */
 
 #ifndef _CFS_H
@@ -33,6 +33,7 @@
 
 /* forword declations */
 struct kvs_idx;
+struct cfs_fh;
 
 struct cfs_fs {
 	struct namespace *ns; /* namespace object */
@@ -191,9 +192,9 @@ typedef void *cfs_fs_ctx_t;
 /* Inode Attributes API */
 int cfs_amend_stat(struct stat *stat, int flags);
 
-int cfs_create_entry(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_ino_t *parent,
-                     char *name, char *lnk, mode_t mode,
-                     cfs_ino_t *new_entry, enum cfs_file_type type);
+int cfs_create_entry(struct cfs_fh *parent_fh, cfs_cred_t *cred, char *name,
+                     char *lnk, mode_t mode, cfs_ino_t *new_entry,
+                     enum cfs_file_type type);
 
 /******************************************************************************/
 /** Change the name of a link between a parent node and a child node without
