@@ -74,7 +74,7 @@ int cfs_set_stat(struct kvnode *node)
 	return rc;
 }
 
-static int __cfs_getattr(struct cfs_fs *cfs_fs, const cfs_cred_t *cred,
+static inline int __cfs_getattr(struct cfs_fs *cfs_fs, const cfs_cred_t *cred,
 			 const cfs_ino_t *ino, struct stat *bufstat)
 {
 	int rc;
@@ -115,8 +115,8 @@ int cfs_getattr(struct cfs_fs *cfs_fs, const cfs_cred_t *cred,
 	return rc;
 }
 
-int cfs_setattr(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_ino_t *ino,
-		struct stat *setstat, int statflag)
+static inline int __cfs_setattr(struct cfs_fs *cfs_fs, cfs_cred_t *cred,
+                         cfs_ino_t *ino, struct stat *setstat, int statflag)
 {
 	struct cfs_fh *fh = NULL;
 	struct stat *stat = NULL;
@@ -195,6 +195,20 @@ out:
 	return rc;
 }
 
+int cfs_setattr(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_ino_t *ino,
+                struct stat *setstat, int statflag)
+{
+    size_t rc;
+
+    perfc_trace_inii(PFT_CFS_SETATTR, PEM_CFS_TO_NFS);
+
+    rc = __cfs_setattr(cfs_fs, cred, ino, setstat, statflag);
+
+    perfc_trace_attr(PEA_SETATTR_RES_RC, rc);
+    perfc_trace_finii(PERFC_TLS_POP_DONT_VERIFY);
+
+    return rc;
+}
 static int __cfs_access(struct cfs_fs *cfs_fs, const cfs_cred_t *cred,
 			const cfs_ino_t *ino, int flags)
 {
