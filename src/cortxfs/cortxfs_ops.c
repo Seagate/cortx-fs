@@ -256,11 +256,9 @@ bool cfs_readdir_cb(void *cb_ctx, const char *name, const struct kvnode *node)
 	return retval;
 }
 
-int cfs_readdir(struct cfs_fs *cfs_fs,
-		const cfs_cred_t *cred,
-		const cfs_ino_t *dir_ino,
-		cfs_readdir_cb_t cb,
-		void *cb_ctx)
+static inline int __cfs_readdir(struct cfs_fs *cfs_fs,
+		const cfs_cred_t *cred, const cfs_ino_t *dir_ino,
+		cfs_readdir_cb_t cb, void *cb_ctx)
 {
 	int rc;
 	struct cfs_readdir_ctx cb_info = { .cb = cb, .ctx = cb_ctx};
@@ -281,8 +279,22 @@ out:
 	return rc;
 }
 
-int cfs_mkdir(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_ino_t *parent_ino,
-              char *name, mode_t mode, cfs_ino_t *newdir_ino)
+int cfs_readdir(struct cfs_fs *cfs_fs,
+		const cfs_cred_t *cred, const cfs_ino_t *dir_ino,
+		cfs_readdir_cb_t cb, void *cb_ctx)
+{
+	int rc;
+
+	perfc_trace_inii(PFT_CFS_READDIR, PEM_CFS_TO_NFS);
+	rc = __cfs_readdir(cfs_fs, cred, dir_ino, cb, cb_ctx);
+	perfc_trace_finii(PERFC_TLS_POP_VERIFY);
+
+	return rc;
+}
+
+static inline int __cfs_mkdir(struct cfs_fs *cfs_fs, cfs_cred_t *cred,
+			cfs_ino_t *parent, char *name,
+			mode_t mode, cfs_ino_t *newdir)
 {
 	int rc;
 	dstore_oid_t oid;
@@ -290,13 +302,13 @@ int cfs_mkdir(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_ino_t *parent_ino,
 	struct cfs_fh *parent_fh = NULL;
 	struct stat *parent_stat = NULL;
 
-	dassert(dstore && cfs_fs && cred && parent_ino && name && newdir_ino);
+	dassert(dstore && cfs_fs && cred && parent && name && newdir);
 
 	/* TODO:Temp_FH_op - to be removed
 	 * Should get rid of creating and destroying FH operation in this
 	 * API when caller pass the valid FH instead of inode number
 	 */
-	RC_WRAP_LABEL(rc, out, cfs_fh_from_ino, cfs_fs, parent_ino, &parent_fh);
+	RC_WRAP_LABEL(rc, out, cfs_fh_from_ino, cfs_fs, parent, &parent_fh);
 
 	parent_stat = cfs_fh_stat(parent_fh);
 
@@ -304,13 +316,13 @@ int cfs_mkdir(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_ino_t *parent_ino,
 		      CFS_ACCESS_WRITE);
 
 	RC_WRAP_LABEL(rc, out, cfs_create_entry, parent_fh, cred, name, NULL,
-		      mode, newdir_ino, CFS_FT_DIR);
+		      mode, newdir, CFS_FT_DIR);
 
 	/* Get a new unique oid */
 	RC_WRAP_LABEL(rc, out, dstore_get_new_objid, dstore, &oid);
 
 	/* Set the ino-oid mapping for this directory in kvs.*/
-	RC_WRAP_LABEL(rc, out, cfs_set_ino_oid, cfs_fs, newdir_ino, &oid);
+	RC_WRAP_LABEL(rc, out, cfs_set_ino_oid, cfs_fs, newdir, &oid);
 
 out:
 	if (parent_fh != NULL) {
@@ -318,7 +330,19 @@ out:
 	}
 
 	log_trace("parent_ino=%llu name=%s newdir_ino=%llu mode=0x%X rc=%d",
-		   *parent_ino, name, *newdir_ino, mode, rc);
+		   *parent, name, *newdir, mode, rc);
+	return rc;
+}
+
+int cfs_mkdir(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_ino_t *parent,
+	      char *name, mode_t mode, cfs_ino_t *newdir)
+{
+	int rc;
+
+	perfc_trace_inii(PFT_CFS_MKDIR, PEM_CFS_TO_NFS);
+	rc = __cfs_mkdir(cfs_fs, cred, parent, name, mode, newdir);
+	perfc_trace_finii(PERFC_TLS_POP_VERIFY);
+
 	return rc;
 }
 
@@ -749,7 +773,8 @@ out:
 	return rc;
 }
 
-int cfs_rmdir(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_ino_t *parent, char *name)
+static inline int __cfs_rmdir(struct cfs_fs *cfs_fs, cfs_cred_t *cred,
+			cfs_ino_t *parent, char *name)
 {
 	int rc;
 	cfs_ino_t ino = 0LL;
@@ -825,6 +850,18 @@ aborted:
 out:
 	log_debug("EXIT cfs_fs=%p ino=%llu name=%s rc=%d", cfs_fs,
 		   ino, name, rc);
+	return rc;
+}
+
+int cfs_rmdir(struct cfs_fs *cfs_fs, cfs_cred_t *cred,
+		cfs_ino_t *parent, char *name)
+{
+	int rc;
+
+	perfc_trace_inii(PFT_CFS_RMDIR, PEM_CFS_TO_NFS);
+	rc = __cfs_rmdir(cfs_fs, cred, parent, name);
+	perfc_trace_finii(PERFC_TLS_POP_VERIFY);
+
 	return rc;
 }
 
