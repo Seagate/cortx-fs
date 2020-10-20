@@ -115,6 +115,7 @@
 #define CFS_FH_H_
 
 #include "cortxfs.h"
+#include "nsal.h"
 struct cfs_fh;
 
 /* The example of CORTXFS API described below allocates new file handles in
@@ -168,6 +169,12 @@ void cfs_fh_destroy(struct cfs_fh *fh);
  */
 void cfs_fh_destroy_and_dump_stat(struct cfs_fh *fh);
 
+/* Get a pointer to node_id of a File Handle.
+ * @param[in] fh - Any initialized FH.
+ * @return Pointer to internal buffer which holds node_id number.
+ */
+node_id_t *cfs_node_id_from_fh(struct cfs_fh *fh);
+
 /* Get a pointer to inode numuber of a File Handle.
  * @param[in] fh - Any initialized FH.
  * @return Pointer to internal buffer which holds inode number.
@@ -179,6 +186,12 @@ cfs_ino_t *cfs_fh_ino(struct cfs_fh *fh);
  * @return Pointer to FS context.
  */
 struct cfs_fs *cfs_fs_from_fh(const struct cfs_fh *fh);
+
+/* Get a pointer to kvnode hold by a File Handle.
+ * @param[in] fh - Any initialized FH.
+ * @return Pointer to internal buffer which holds struct kvnode.
+ */
+struct kvnode *cfs_kvnode_from_fh(struct cfs_fh *fh);
 
 /* Get a pointer to attributes (stat) of a File Handle.
  * @param[in] fh - Any initialized FH.
