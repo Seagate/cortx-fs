@@ -524,24 +524,25 @@ static inline bool cfs_file_has_links(struct stat *stat)
 	return stat->st_nlink > 0;
 }
 
-int cfs_destroy_orphaned_file(struct cfs_fs *cfs_fs,
-			      const cfs_ino_t *ino)
+static int cfs_destroy_orphaned_file2(struct cfs_fh *fh)
 {
-
 	int rc;
-	struct stat *stat = NULL;
 	dstore_oid_t oid;
+	cfs_ino_t *ino = NULL;
+	struct cfs_fs *cfs_fs = NULL;
+	struct stat *stat = NULL;
+	struct kvnode *node = NULL;
 	struct kvstore *kvstor = kvstore_get();
 	struct dstore *dstore = dstore_get();
 	struct kvs_idx index;
-	struct kvnode node = KVNODE_INIT_EMTPY;
 
-	dassert(kvstor && dstore);
+	dassert(kvstor && dstore && fh);
+
+	cfs_fs = cfs_fs_from_fh(fh);
+	ino = cfs_fh_ino(fh);
+	stat = cfs_fh_stat(fh);
 
 	index = cfs_fs->kvtree->index;
-
-	RC_WRAP_LABEL(rc, out, cfs_kvnode_load, &node, cfs_fs->kvtree, ino);
-	RC_WRAP_LABEL(rc, out, cfs_get_stat, &node, &stat);
 
 	if (cfs_file_has_links(stat)) {
 		rc = 0;
@@ -550,11 +551,12 @@ int cfs_destroy_orphaned_file(struct cfs_fs *cfs_fs,
 
 	kvs_begin_transaction(kvstor, &index);
 
-	RC_WRAP_LABEL(rc, out, cfs_del_stat, &node);
+	node = cfs_kvnode_from_fh(fh);
+	RC_WRAP_LABEL(rc, out, cfs_del_stat, node);
 
 	if (S_ISLNK(stat->st_mode)) {
 		/* Delete symlink */
-		RC_WRAP_LABEL(rc, out, cfs_del_sysattr, &node,
+		RC_WRAP_LABEL(rc, out, cfs_del_sysattr, node,
 			      CFS_SYS_ATTR_SYMLINK);
 	} else if (S_ISREG(stat->st_mode)) {
 		RC_WRAP_LABEL(rc, out, cfs_ino_to_oid, cfs_fs, ino, &oid);
@@ -574,15 +576,32 @@ int cfs_destroy_orphaned_file(struct cfs_fs *cfs_fs,
 	kvs_end_transaction(kvstor, &index);
 
 out:
-	kvnode_fini(&node);
-	if (stat) {
-		kvs_free(kvstor, stat);
-	}
-
 	if (rc != 0) {
 		kvs_discard_transaction(kvstor, &index);
 	}
 
+	log_trace("inode=%llu rc=%d", *ino, rc);
+	return rc;
+}
+
+int cfs_destroy_orphaned_file(struct cfs_fs *cfs_fs,
+                              const cfs_ino_t *ino)
+{
+	int rc;
+	struct cfs_fh *fh = NULL;
+
+	/* TODO:Temp_FH_op - to be removed
+	 * Should get rid of creating and destroying FH operation in this
+	 * API when caller pass the valid FH instead of inode number
+	 */
+	RC_WRAP_LABEL(rc, out, cfs_fh_from_ino, cfs_fs, ino, &fh);
+	RC_WRAP_LABEL(rc, out, cfs_destroy_orphaned_file2, fh);
+
+out:
+	if (fh != NULL) {
+		cfs_fh_destroy(fh);
+	}
+	log_trace("inode=%llu rc=%d", *ino, rc);
 	return rc;
 }
 
@@ -865,48 +884,81 @@ out:
 	return rc;
 }
 
-int cfs_detach(struct cfs_fs *cfs_fs, const cfs_cred_t *cred,
-	       const cfs_ino_t *parent, const cfs_ino_t *obj,
-	       const char *name)
+static int cfs_detach2(struct cfs_fh *parent_fh, struct cfs_fh *child_fh,
+                       const cfs_cred_t *cred, const char *name)
 {
 	int rc;
 	str256_t k_name;
-	struct kvstore *kvstor = kvstore_get();
 	struct kvs_idx index;
-	struct kvnode node = KVNODE_INIT_EMTPY;
-	struct kvnode pnode = KVNODE_INIT_EMTPY;
+	struct kvstore *kvstor = kvstore_get();
+	struct cfs_fs *cfs_fs = NULL;
+	struct stat *parent_stat = NULL;
+	struct stat *child_stat = NULL;
+	node_id_t *pnode_id = NULL;
 
-	dassert(kvstor != NULL);
+	dassert(kvstor && parent_fh && cred && child_fh && name);
 
+	cfs_fs = cfs_fs_from_fh(parent_fh);
 	index = cfs_fs->kvtree->index;
-
-	str256_from_cstr(k_name, name, strlen(name));
-	RC_WRAP_LABEL(rc, out, cfs_access, cfs_fs, (cfs_cred_t *) cred,
-		      (cfs_ino_t *) parent, CFS_ACCESS_DELETE_ENTITY);
-
 	kvs_begin_transaction(kvstor, &index);
 
-	node_id_t pnode_id;
+	parent_stat = cfs_fh_stat(parent_fh);
+	child_stat = cfs_fh_stat(child_fh);
 
-	ino_to_node_id(parent, &pnode_id);
-	RC_WRAP_LABEL(rc, out, kvtree_detach, cfs_fs->kvtree, &pnode_id,
+	RC_WRAP_LABEL(rc, out, cfs_access_check, cred, parent_stat,
+		      CFS_ACCESS_DELETE_ENTITY);
+
+	pnode_id = cfs_node_id_from_fh(parent_fh);
+	str256_from_cstr(k_name, name, strlen(name));
+	RC_WRAP_LABEL(rc, out, kvtree_detach, cfs_fs->kvtree, pnode_id,
 		      &k_name);
 
-	RC_WRAP_LABEL(rc, out, cfs_kvnode_load, &node, cfs_fs->kvtree, obj);
-	RC_WRAP_LABEL(rc, out, cfs_update_stat, &node,
+	RC_WRAP_LABEL(rc, out, cfs_amend_stat, child_stat,
 		      STAT_CTIME_SET|STAT_DECR_LINK);
 
-	RC_WRAP_LABEL(rc, out, cfs_kvnode_load, &pnode, cfs_fs->kvtree, parent);
-	RC_WRAP_LABEL(rc, out, cfs_update_stat, &pnode,
+	RC_WRAP_LABEL(rc, out, cfs_amend_stat, parent_stat,
 		      STAT_CTIME_SET|STAT_MTIME_SET);
 
 	kvs_end_transaction(kvstor, &index);
 
 out:
-	kvnode_fini(&pnode);
-	kvnode_fini(&node);
 	if (rc != 0) {
 		kvs_discard_transaction(kvstor, &index);
 	}
+
+	log_trace("parent_ino=%llu name=%s child_ino=%llu rc=%d",
+		  (unsigned long long int)parent_stat->st_ino, name,
+		  (unsigned long long int)child_stat->st_ino, rc);
+
+	return rc;
+}
+
+int cfs_detach(struct cfs_fs *cfs_fs, const cfs_cred_t *cred,
+               const cfs_ino_t *parent_ino, const cfs_ino_t *child_ino,
+               const char *name)
+{
+	int rc;
+	struct cfs_fh *parent_fh = NULL;
+	struct cfs_fh *child_fh = NULL;
+
+	/* TODO:Temp_FH_op - to be removed
+	 * Should get rid of creating and destroying FH operation in this
+	 * API when caller pass the valid FH instead of inode number
+	 */
+	RC_WRAP_LABEL(rc, out, cfs_fh_from_ino, cfs_fs, parent_ino, &parent_fh);
+	RC_WRAP_LABEL(rc, out, cfs_fh_from_ino, cfs_fs, child_ino, &child_fh);
+	RC_WRAP_LABEL(rc, out, cfs_detach2, parent_fh, child_fh, cred, name);
+
+out:
+	if (parent_fh != NULL) {
+		cfs_fh_destroy_and_dump_stat(parent_fh);
+	}
+
+	if (child_fh != NULL) {
+		cfs_fh_destroy_and_dump_stat(child_fh);
+	}
+
+	log_trace("parent_ino=%llu name=%s child_ino=%llu rc=%d",
+		  *parent_ino, name, *child_ino, rc);
 	return rc;
 }

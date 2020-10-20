@@ -111,12 +111,26 @@ struct stat *cfs_fh_stat(const struct cfs_fh *fh)
 	return cfs_get_stat2(&fh->f_node);
 }
 
+struct kvnode *cfs_kvnode_from_fh(struct cfs_fh *fh)
+{
+	dassert(fh);
+	dassert(cfs_fh_invariant(fh));
+	return &fh->f_node;
+}
+
 static inline
 void cfs_fh_init_key(struct cfs_fh *fh)
 {
 	struct stat *stat = cfs_fh_stat(fh);
 	fh->key.file = stat->st_ino;
 	fh->key.fs = fh->fs;
+}
+
+node_id_t *cfs_node_id_from_fh(struct cfs_fh *fh)
+{
+	dassert(fh);
+	dassert(cfs_fh_invariant(fh));
+	return &fh->f_node.node_id;
 }
 
 cfs_ino_t *cfs_fh_ino(struct cfs_fh *fh)
