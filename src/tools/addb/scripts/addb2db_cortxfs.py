@@ -72,7 +72,7 @@ class entity_attributes(BaseModel):
     entity_type = TextField()
     opid        = IntegerField()
     attr_name   = TextField()
-    attr_val    = IntegerField()
+    attr_val    = TextField()
 
 class entity_maps(BaseModel):
     pid         = IntegerField()
@@ -83,6 +83,7 @@ class entity_maps(BaseModel):
     map_name    = IntegerField()
     src_opid    = IntegerField()
     dst_opid    = IntegerField()
+    clr_opid    = IntegerField()
 
 db_create_delete_tables = [entity_states, entity_attributes, entity_maps]
 
@@ -170,7 +171,10 @@ class ADDB2PPNFS:
         ret['entity_type'] = row[4]
         ret['opid'] = int(row[5], 16)
         ret['attr_name'] = row[6]
-        ret['attr_val'] = int(row[8], 16)
+        if ret['attr_name'].find("attr_time") == -1:
+            ret['attr_val'] = int(row[7], 16)
+        else:
+            ret['attr_val'] = "NA"
         return((table, ret))
 
     # [ '*',
@@ -190,9 +194,9 @@ class ADDB2PPNFS:
         ret['fn_tag'] = row[3]
         ret['entity_type'] = row[4]
         ret['map_name'] = int(row[5], 16)
-        # ret['src_opid'] = int(row[6], 16)
-        ret['src_opid'] = 0
-        ret['dst_opid'] = int(row[8], 16)
+        ret['src_opid'] = int(row[6], 16)
+        ret['dst_opid'] = int(row[7], 16)
+        ret['clr_opid'] = int(row[8], 16)
         return((table, ret))
 
     def __init__(self):
