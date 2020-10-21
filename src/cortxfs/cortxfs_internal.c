@@ -14,7 +14,7 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  * For any questions about this software or licensing,
- * please email opensource@seagate.com or cortx-questions@seagate.com. 
+ * please email opensource@seagate.com or cortx-questions@seagate.com.
  */
 
 #include <stdio.h>
@@ -29,6 +29,7 @@
 #include <common/log.h>
 #include <common/helpers.h>
 #include "cortxfs.h"
+#include "cortxfs_fh.h"
 #include "cortxfs_internal.h"
 #include <dstore.h>
 #include <debug.h>
@@ -517,24 +518,29 @@ out:
 
 static int cfs_create_check_name(const char *name, size_t len)
 {
+	int rc = 0;
 	const char *parent = "..";
 
 	if (len > NAME_MAX) {
 		log_debug("Name too long %s", name);
-		return  -E2BIG;
+		rc = -E2BIG;
+		goto out;
 	}
 
 	if (len == 1 && (name[0] == '.' || name[0] == '/')) {
 		log_debug("File already exists: %s", name);
-		return -EEXIST;
+		rc = -EEXIST;
+		goto out;
 	}
 
 	if (len == 2 && (strncmp(name, parent, 2) == 0)) {
 		log_debug("File already exists: %s", name);
-		return -EEXIST;
+		rc = -EEXIST;
+		goto out;
 	}
 
-	return 0;
+out:
+	return rc;
 }
 
 int cfs_next_inode(struct cfs_fs *cfs_fs, cfs_ino_t *ino_out)
@@ -555,67 +561,70 @@ out:
 	return rc;
 }
 
-int cfs_create_entry(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_ino_t *parent,
-		     char *name, char *lnk, mode_t mode,
-		     cfs_ino_t *new_entry, enum cfs_file_type type)
+int cfs_create_entry(struct cfs_fh *parent_fh, cfs_cred_t *cred, char *name,
+                     char *lnk, mode_t mode, cfs_ino_t *new_entry,
+                     enum cfs_file_type type)
 {
 	int rc;
+	int flags;
 	struct stat bufstat;
 	struct timeval t;
 	size_t namelen;
-	str256_t k_name;
+	struct cfs_fs *cfs_fs = cfs_fs_from_fh(parent_fh);
 	struct kvstore *kvstor = kvstore_get();
-	struct kvs_idx index;
-	struct kvnode new_node = KVNODE_INIT_EMTPY,
-	              parent_node = KVNODE_INIT_EMTPY;
+	struct kvs_idx index = cfs_fs->kvtree->index;
+	struct kvnode new_node = KVNODE_INIT_EMTPY;
+	struct stat *parent_stat = NULL;
+	struct cfs_fh *fh = NULL;
+	str256_t k_name;
 	node_id_t new_node_id, parent_node_id;
 
 	dassert(kvstor);
-	index = cfs_fs->kvtree->index;
 
-	dassert(cred && parent && name && new_entry);
+	parent_stat = cfs_fh_stat(parent_fh);
 
 	namelen = strlen(name);
-	if (namelen == 0)
-		return -EINVAL;
+	if (namelen == 0) {
+		rc = -EINVAL;
+		goto out;
+	}
 
 	/* check if name is not '.' or '..' or '/' */
-	rc = cfs_create_check_name(name, namelen);
-	if (rc != 0)
-		return rc;
+	RC_WRAP_LABEL(rc, out, cfs_create_check_name, name, namelen);
 
-	if ((type == CFS_FT_SYMLINK) && (lnk == NULL))
-		return -EINVAL;
+	if ((type == CFS_FT_SYMLINK) && (lnk == NULL)) {
+		rc = -EINVAL;
+		goto out;
+	}
 
 	/* Return if file/dir/symlink already exists. */
-	rc = cfs_lookup(cfs_fs, cred, parent, name, new_entry);
-	if (rc == 0)
-		return -EEXIST;
+	rc = cfs_fh_lookup(cred, parent_fh, name, &fh);
+	if (rc == 0) {
+		rc = -EEXIST;
+		goto out;
+	}
 
-	RC_WRAP(cfs_next_inode, cfs_fs, new_entry);
-	RC_WRAP(kvs_begin_transaction, kvstor, &index);
-
-	/* @todo: Alloc motr bufvecs and use it for key to avoid extra mem copy
-	RC_WRAP_LABEL(rc, errfree, cfs_alloc_dirent_key, namelen, &d_key); */
+	RC_WRAP_LABEL(rc, out, cfs_next_inode, cfs_fs, new_entry);
+	RC_WRAP_LABEL(rc, out, kvs_begin_transaction, kvstor, &index);
 
 	str256_from_cstr(k_name, name, strlen(name));
 
 	ino_to_node_id(new_entry, &new_node_id);
-	ino_to_node_id(parent, &parent_node_id);
+	ino_to_node_id((cfs_ino_t *)&parent_stat->st_ino, &parent_node_id);
 
 	RC_WRAP_LABEL(rc, errfree, kvtree_attach, cfs_fs->kvtree,
 	              &parent_node_id, &new_node_id, &k_name);
+
+	if (gettimeofday(&t, NULL) != 0) {
+		rc = -EPERM;
+		goto errfree;
+	}
 
 	/* Set the stats of the new file */
 	memset(&bufstat, 0, sizeof(struct stat));
 	bufstat.st_uid = cred->uid;
 	bufstat.st_gid = cred->gid;
 	bufstat.st_ino = *new_entry;
-
-	if (gettimeofday(&t, NULL) != 0) {
-		rc = -1;
-		goto errfree;
-	}
 
 	bufstat.st_atim.tv_sec = t.tv_sec;
 	bufstat.st_atim.tv_nsec = 1000 * t.tv_usec;
@@ -649,6 +658,7 @@ int cfs_create_entry(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_ino_t *parent,
 		rc = -EINVAL;
 		goto errfree;
 	}
+
 	/* Create node for new entry and set its stats */
 	RC_WRAP_LABEL(rc, errfree, cfs_kvnode_init, &new_node, cfs_fs->kvtree,
 	              new_entry, &bufstat);
@@ -664,30 +674,33 @@ int cfs_create_entry(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_ino_t *parent,
 		              CFS_SYS_ATTR_SYMLINK);
 	}
 
-	/* Load parent node to update its stats */
-	RC_WRAP_LABEL(rc, errfree, cfs_kvnode_load, &parent_node,
-	              cfs_fs->kvtree, parent);
+	/* Update the parent stat */
+	flags = STAT_CTIME_SET | STAT_MTIME_SET;
 
 	if (type == CFS_FT_DIR) {
 		/* Child dir has a "hardlink" to the parent ("..") */
-		RC_WRAP_LABEL(rc, errfree, cfs_update_stat, &parent_node,
-			      STAT_CTIME_SET | STAT_MTIME_SET | STAT_INCR_LINK);
-	} else {
-		RC_WRAP_LABEL(rc, errfree, cfs_update_stat, &parent_node,
-		              STAT_CTIME_SET | STAT_MTIME_SET);
+		flags |= STAT_INCR_LINK;
 	}
+
+	RC_WRAP_LABEL(rc, errfree, cfs_amend_stat, parent_stat, flags);
 
 	RC_WRAP(kvs_end_transaction, kvstor, &index);
 
 errfree:
 	kvnode_fini(&new_node);
-	kvnode_fini(&parent_node);
 
 	if (rc != 0) {
 		kvs_discard_transaction(kvstor, &index);
 	}
 
-	log_trace("cfs_create_entry: rc=%d", rc);
+out:
+	if (fh != NULL) {
+		cfs_fh_destroy(fh);
+	}
+
+	log_trace("parent_ino=%llu name=%s new_entry=%llu rc=%d",
+		  (unsigned long long int)parent_stat->st_ino, name, *new_entry,
+		  rc);
 	return rc;
 }
 

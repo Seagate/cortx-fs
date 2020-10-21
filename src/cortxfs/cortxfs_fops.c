@@ -14,13 +14,14 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  * For any questions about this software or licensing,
- * please email opensource@seagate.com or cortx-questions@seagate.com. 
+ * please email opensource@seagate.com or cortx-questions@seagate.com.
  */
 
 #include <string.h> /* memset */
 #include <kvstore.h> /* kvstore */
 #include <dstore.h> /* dstore */
 #include <cortxfs.h> /* cfs_access */
+#include "cortxfs_fh.h"
 #include "cortxfs_internal.h" /* cfs_set_ino_oid */
 #include <common/log.h> /* log_* */
 #include <common/helpers.h> /* RC_* */
@@ -29,29 +30,49 @@
 #include <errno.h>
 #include "operation.h"
 
-int cfs_creat(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_ino_t *parent,
-	      char *name, mode_t mode, cfs_ino_t *newfile)
+int cfs_creat(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_ino_t *parent_ino,
+              char *name, mode_t mode, cfs_ino_t *newfile_ino)
 {
+	int rc;
 	dstore_oid_t  oid;
+	struct cfs_fh *parent_fh = NULL;
+	struct stat *parent_stat = NULL;
 	struct dstore *dstore = dstore_get();
 
 	dassert(dstore);
 
-	log_trace("ENTER: parent=%p name=%s file=%p mode=0x%X",
-		  parent, name, newfile, mode);
+	/* TODO:Temp_FH_op - to be removed
+	 * Should get rid of creating and destroying FH operation in this
+	 * API when caller pass the valid FH instead of inode number
+	 */
+	RC_WRAP_LABEL(rc, out, cfs_fh_from_ino, cfs_fs, parent_ino, &parent_fh);
 
-	RC_WRAP(cfs_access, cfs_fs, cred, parent, CFS_ACCESS_WRITE);
+	parent_stat = cfs_fh_stat(parent_fh);
+
+	RC_WRAP_LABEL(rc, out, cfs_access_check, cred, parent_stat,
+		      CFS_ACCESS_WRITE);
+
 	/* Create tree entries, get new inode */
-	RC_WRAP(cfs_create_entry, cfs_fs, cred, parent, name, NULL,
-		mode, newfile, CFS_FT_FILE);
+	RC_WRAP_LABEL(rc, out, cfs_create_entry, parent_fh, cred, name, NULL,
+		      mode, newfile_ino, CFS_FT_FILE);
+
 	/* Get new unique extstore kfid */
-	RC_WRAP(dstore_get_new_objid, dstore, &oid);
+	RC_WRAP_LABEL(rc, out, dstore_get_new_objid, dstore, &oid);
+
 	/* Set the ino-kfid key-val in kvs */
-	RC_WRAP(cfs_set_ino_oid, cfs_fs, newfile, &oid);
+	RC_WRAP_LABEL(rc, out, cfs_set_ino_oid, cfs_fs, newfile_ino, &oid);
+
 	/* Create the backend object with passed kfid */
-	RC_WRAP(dstore_obj_create, dstore, cfs_fs, &oid);
-	log_trace("EXIT");
-	return 0;
+	RC_WRAP_LABEL(rc, out, dstore_obj_create, dstore, cfs_fs, &oid);
+
+out:
+	if (parent_fh != NULL) {
+		cfs_fh_destroy_and_dump_stat(parent_fh);
+	}
+
+	log_trace("parent_ino=%llu name=%s newfile_ino=%llu rc=%d",
+		  *parent_ino, name, *newfile_ino, rc);
+	return rc;
 }
 
 int cfs_creat_ex(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_ino_t *parent,
@@ -64,7 +85,8 @@ int cfs_creat_ex(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_ino_t *parent,
 	struct kvstore *kvstor = kvstore_get();
 	struct kvs_idx index;
 
-	dassert(kvstor);
+	dassert(kvstor && cfs_fs && parent && name && stat_in && newfile &&
+		stat_out);
 
 	index = cfs_fs->kvtree->index;
 
@@ -96,8 +118,9 @@ out:
 	return rc;
 }
 
-ssize_t cfs_write(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_file_open_t *fd,
-		  void *buf, size_t count, off_t offset)
+static inline ssize_t __cfs_write(struct cfs_fs *cfs_fs, cfs_cred_t *cred,
+				  cfs_file_open_t *fd, void *buf,
+				  size_t count, off_t offset)
 {
 	int rc;
 	struct stat stat;
@@ -146,6 +169,23 @@ out:
 	kvnode_fini(&node);
 	log_trace("cfs_write: ino=%llu fd=%p count=%lu offset=%ld rc=%d",
 		  fd->ino, fd, count, (long)offset, rc);
+	return rc;
+}
+
+ssize_t cfs_write(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_file_open_t *fd,
+		 void *buf, size_t count, off_t offset)
+{
+	size_t rc;
+
+	perfc_trace_inii(PFT_CFS_WRITE, PEM_CFS_TO_NFS);
+	perfc_trace_attr(PEA_R_C_COUNT, count);
+	perfc_trace_attr(PEA_R_C_OFFSET, offset);
+
+	rc = __cfs_write(cfs_fs, cred, fd, buf, count, offset);
+
+	perfc_trace_attr(PEA_R_C_RES_RC, rc);
+	perfc_trace_finii(PERFC_TLS_POP_VERIFY);
+
 	return rc;
 }
 

@@ -29,6 +29,7 @@
 #include <common.h> /* unlikely */
 #include <common/log.h> /* log_err() */
 #include "kvtree.h" /* kvtree_lookup() */
+#include "operation.h" /* perf tracepoints */
 
 /**
  * A unique key to be used in containers (maps, sets).
@@ -97,9 +98,24 @@ struct cfs_fh_serialized {
 	cfs_ino_t ino_num;
 };
 
+struct cfs_fs *cfs_fs_from_fh(const struct cfs_fh *fh)
+{
+	dassert(fh);
+	dassert(cfs_fh_invariant(fh));
+	return fh->fs;
+}
+
 struct stat *cfs_fh_stat(const struct cfs_fh *fh)
 {
+	dassert(fh);
 	return cfs_get_stat2(&fh->f_node);
+}
+
+struct kvnode *cfs_kvnode_from_fh(struct cfs_fh *fh)
+{
+	dassert(fh);
+	dassert(cfs_fh_invariant(fh));
+	return &fh->f_node;
 }
 
 static inline
@@ -108,6 +124,13 @@ void cfs_fh_init_key(struct cfs_fh *fh)
 	struct stat *stat = cfs_fh_stat(fh);
 	fh->key.file = stat->st_ino;
 	fh->key.fs = fh->fs;
+}
+
+node_id_t *cfs_node_id_from_fh(struct cfs_fh *fh)
+{
+	dassert(fh);
+	dassert(cfs_fh_invariant(fh));
+	return &fh->f_node.node_id;
 }
 
 cfs_ino_t *cfs_fh_ino(struct cfs_fh *fh)
@@ -124,7 +147,7 @@ int cfs_fh_from_ino(struct cfs_fs *fs, const cfs_ino_t *ino_num,
 	struct kvstore *kvstor =  kvstore_get();
 	struct kvnode node = KVNODE_INIT_EMTPY;
 
-	dassert(kvstor);
+	dassert(kvstor && fs && ino_num && fh);
 
 	/* A caller for this API who uses/caches this FH, will be responsible
 	 * for freeing up this FH, caller should be calling cfs_fh_destroy to
@@ -141,6 +164,7 @@ int cfs_fh_from_ino(struct cfs_fs *fs, const cfs_ino_t *ino_num,
 	newfh->f_node = node;
 	newfh->fs = fs;
 	cfs_fh_init_key(newfh);
+	dassert(cfs_fh_invariant(newfh));
 	*fh = newfh;
 	newfh = NULL;
 out:
@@ -150,8 +174,9 @@ out:
 	return rc;
 }
 
-int cfs_fh_lookup(const cfs_cred_t *cred, struct cfs_fh *parent_fh,
-                  const char *name, struct cfs_fh **fh)
+static inline int __cfs_fh_lookup(const cfs_cred_t *cred,
+				  struct cfs_fh *parent_fh,
+				  const char *name, struct cfs_fh **fh)
 {
 	int rc;
 	str256_t kname;
@@ -163,9 +188,9 @@ int cfs_fh_lookup(const cfs_cred_t *cred, struct cfs_fh *parent_fh,
 	node_id_t pid, id;
 
 	dassert(cred && parent_fh && name && fh && kvstor);
+	dassert(cfs_fh_invariant(parent_fh));
 
 	parent_stat = cfs_fh_stat(parent_fh);
-	dassert(parent_stat != NULL);
 
 	RC_WRAP_LABEL(rc, out, cfs_access_check,
 		      (cfs_cred_t *) cred, parent_stat, CFS_ACCESS_READ);
@@ -194,6 +219,7 @@ int cfs_fh_lookup(const cfs_cred_t *cred, struct cfs_fh *parent_fh,
 	newfh->fs = parent_fh->fs;
 	newfh->f_node = node;
 	cfs_fh_init_key(newfh);
+	dassert(cfs_fh_invariant(newfh));
 	*fh = newfh;
 	newfh = NULL;
 
@@ -205,18 +231,48 @@ out:
 	return rc;
 }
 
+int cfs_fh_lookup(const cfs_cred_t *cred, struct cfs_fh *parent_fh,
+                const char *name, struct cfs_fh **fh)
+{
+	int rc;
+
+	perfc_trace_inii(PFT_CFS_LOOKUP, PEM_CFS_TO_NFS);
+	rc = __cfs_fh_lookup(cred, parent_fh, name, fh);
+	perfc_trace_finii(PERFC_TLS_POP_VERIFY);
+
+	return rc;
+}
+
 void cfs_fh_destroy(struct cfs_fh *fh)
 {
 	struct kvstore *kvstor = kvstore_get();
 
-	dassert(kvstor);
+	dassert(kvstor && fh);
 	dassert(cfs_fh_invariant(fh));
 
-	if (fh) {
-		cfs_set_stat(&fh->f_node);
-		kvnode_fini(&fh->f_node);
-		kvs_free(kvstor, fh);
-	}
+	/* Note: As of now, destroying FH does not update the stats in backend
+	 * because those are stale, the reason for that is FH is not supplied
+	 * as input param to each of the cortxfs API which can modify the stats
+	 * of file directly in FH.
+	 * TODO: Temp_FH_op - to be removed
+	 * Uncomment the logic to dump the stats associated with FH once FH is
+	 * present everywhere all the update happens to FH
+	 */
+	/* cfs_set_stat(&fh->f_node); */
+	kvnode_fini(&fh->f_node);
+	kvs_free(kvstor, fh);
+}
+
+void cfs_fh_destroy_and_dump_stat(struct cfs_fh *fh)
+{
+	struct kvstore *kvstor = kvstore_get();
+
+	dassert(kvstor && fh);
+	dassert(cfs_fh_invariant(fh));
+
+	cfs_set_stat(&fh->f_node);
+	kvnode_fini(&fh->f_node);
+	kvs_free(kvstor, fh);
 }
 
 int cfs_fh_getroot(struct cfs_fs *fs, const cfs_cred_t *cred,
@@ -227,10 +283,11 @@ int cfs_fh_getroot(struct cfs_fs *fs, const cfs_cred_t *cred,
 	struct stat *stat = NULL;
 	cfs_ino_t root_ino = CFS_ROOT_INODE;
 
+	dassert(fs && cred && pfh);
+
 	RC_WRAP_LABEL(rc, out, cfs_fh_from_ino, fs, &root_ino, &fh);
 
 	stat = cfs_fh_stat(fh);
-	dassert(stat != NULL);
 
 	RC_WRAP_LABEL(rc, out, cfs_access_check,
 		      (cfs_cred_t *) cred, stat, CFS_ACCESS_READ);
@@ -251,6 +308,7 @@ int cfs_fh_serialize(const struct cfs_fh *fh, void* buffer, size_t max_size)
 	struct stat *stat = NULL;
 	struct cfs_fh_serialized data = { .ino_num = 0 };
 
+	dassert(fh && buffer);
 	dassert(cfs_fh_invariant(fh));
 
 	if (max_size < sizeof(struct cfs_fh_serialized)) {
@@ -259,7 +317,6 @@ int cfs_fh_serialize(const struct cfs_fh *fh, void* buffer, size_t max_size)
 	}
 
 	stat = cfs_fh_stat(fh);
-	dassert(stat);
 	data.ino_num = (cfs_ino_t)stat->st_ino;
 	/* fsid is ignored */
 
@@ -277,6 +334,8 @@ int cfs_fh_deserialize(struct cfs_fs *fs,
 {
 	int rc = 0;
 	struct cfs_fh_serialized data = { .ino_num = 0 };
+
+	dassert(fs && cred && buffer && pfh);
 
 	/* FIXME: We need to check if this function is a subject
 	 * to access checks.
@@ -310,6 +369,7 @@ int cfs_fh_ser_with_fsid(const struct cfs_fh *fh, uint64_t fsid, void *buffer,
 	struct stat *stat = NULL;
 	struct cfs_fh_serialized data = { .ino_num = 0 };
 
+	dassert(fh && buffer);
 	dassert(cfs_fh_invariant(fh));
 
 	if (max_size < sizeof(struct cfs_fh_serialized)) {
@@ -318,7 +378,6 @@ int cfs_fh_ser_with_fsid(const struct cfs_fh *fh, uint64_t fsid, void *buffer,
 	}
 
 	stat = cfs_fh_stat(fh);
-	dassert(stat != NULL);
 	data.ino_num = stat->st_ino;;
 	data.fsid = fsid;
 
@@ -331,6 +390,7 @@ out:
 
 void cfs_fh_key(const struct cfs_fh *fh, void **pbuffer, size_t *psize)
 {
+	dassert(fh && pbuffer && psize);
 	*pbuffer = (void *) &fh->key;
 	*psize = sizeof(fh->key);
 }
