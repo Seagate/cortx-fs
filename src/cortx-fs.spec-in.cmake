@@ -71,6 +71,8 @@ mkdir -p %{buildroot}%{_libdir}/pkgconfig
 install -m 644 include/*.h  %{buildroot}%{_cortxfs_include_dir}
 install -m 755 lib%{_cortxfs_lib}.so %{buildroot}%{_cortxfs_lib_dir}
 install -m 644 cortxfs.conf %{buildroot}%{_cortxfs_conf_dir}
+install -m 644 management/REST_doc.html \
+%{buildroot}%{_cortxfs_include_dir}
 install -m 755 cortxfscli/cortxfscli.py %{buildroot}%{_cortxfs_bin_dir}/cortxfscli
 install -m 644 %{_cortxfs_lib}.pc  %{buildroot}%{_libdir}/pkgconfig
 ln -s %{_cortxfs_lib_dir}/lib%{_cortxfs_lib}.so %{buildroot}%{_libdir}/lib%{_cortxfs_lib}.so
@@ -89,11 +91,11 @@ rm -rf $RPM_BUILD_ROOT
 %{_cortxfs_bin_dir}/cortxfscli
 %{_bindir}/cortxfscli
 %{_cortxfs_log_dir}
-
 %files devel
 %defattr(-,root,root)
 %{_libdir}/pkgconfig/%{_cortxfs_lib}.pc
 %{_cortxfs_include_dir}/*.h
+%{_cortxfs_include_dir}/REST_doc.html
 
 %changelog
 * Thu Feb 6 2020 Seagate 1.0.1

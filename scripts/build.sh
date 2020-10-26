@@ -164,6 +164,17 @@ cortxfs_make() {
         exit 1;
     fi
 
+    if [ -f "$CORTXFS_SRC/management/REST_doc.html" ]; then
+	    echo "Deleting Swagger Documentation"
+	    rm "$CORTXFS_SRC/management/REST_doc.html"
+    fi
+
+    sudo pip3 install PyYaml
+    echo "Generating Swagger Documentation"
+    python3 "$CORTXFS_SRC/management/swagger-yaml-to-html.py" < \
+    "$CORTXFS_SRC/management/openapi.yaml" > \
+    "$CORTXFS_SRC/management/REST_doc.html"
+
     cd "$CORTXFS_BUILD"
     make "$@"
     cd -
