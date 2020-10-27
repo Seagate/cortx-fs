@@ -58,9 +58,9 @@ def graph_node_add(g: Digraph, name: str, header: str, attrs: Dict):
 
 def gen_perfc_op_call_graph(fsal_op_id: int=None, op_file: str="cortxfs_perfc_graph"):
     ext_graph=None
-    label_maps = ("id", "pid", "time", "tsdb_mod", "fn_tag", "entity_type", "map_name", "src_opid", "dst_opid", "clr_opid");
-    label_attrs = ("id", "pid", "time", "tsdb_mod", "fn_tag", "entity_type", "opid", "attr_name", "attr_val");
-    label_states = ("id", "pid", "time", "tsdb_mod", "fn_tag", "entity_type", "opid", "state_type");
+    label_maps = ("id", "pid", "time", "tsdb_mod", "fn_tag", "sm_tag", "entity_type", "map_name", "src_opid", "dst_opid", "clr_opid");
+    label_attrs = ("id", "pid", "time", "tsdb_mod", "fn_tag", "sm_tag", "entity_type", "opid", "attr_name", "attr_val");
+    label_states = ("id", "pid", "time", "tsdb_mod", "fn_tag", "sm_tag", "entity_type", "opid", "state_type");
 
     with DB.atomic():
         cursor = DB.execute_sql(f"SELECT * from entity_states WHERE opid IN(SELECT ES.opid FROM entity_states ES JOIN entity_maps EM ON EM.src_opid = ES.opid AND EM.dst_opid = {fsal_op_id} OR ES.opid = {fsal_op_id} GROUP BY ES.opid) ORDER BY id ASC")
