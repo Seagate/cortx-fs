@@ -40,6 +40,7 @@ int cfs_creat(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_ino_t *parent_ino,
 	struct stat *parent_stat = NULL;
 	struct dstore *dstore = dstore_get();
 
+	perfc_trace_inii(PFT_CFS_CREATE, PEM_CFS_TO_NFS);
 	dassert(dstore);
 
 	/* TODO:Temp_FH_op - to be removed
@@ -73,6 +74,10 @@ out:
 
 	log_trace("parent_ino=%llu name=%s newfile_ino=%llu rc=%d",
 		  *parent_ino, name, *newfile_ino, rc);
+	perfc_trace_attr(PEA_CFS_CREATE_PARENT_INODE, *parent_ino);
+	perfc_trace_attr(PEA_CFS_NEW_FILE_INODE, *newfile_ino);
+	perfc_trace_attr(PEA_CFS_RES_RC, rc);
+	perfc_trace_finii(PERFC_TLS_POP_DONT_VERIFY);
 	return rc;
 }
 
@@ -86,6 +91,7 @@ int cfs_creat_ex(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_ino_t *parent,
 	struct kvstore *kvstor = kvstore_get();
 	struct kvs_idx index;
 
+	perfc_trace_inii(PFT_CFS_CREATE_EX, PEM_CFS_TO_NFS);
 	dassert(kvstor && cfs_fs && parent && name && stat_in && newfile &&
 		stat_out);
 
@@ -116,6 +122,8 @@ out:
 		(void) cfs_unlink(cfs_fs, cred, parent, &object, name);
 		(void) kvs_discard_transaction(kvstor, &index);
 	}
+	perfc_trace_attr(PEA_CFS_RES_RC, rc);
+	perfc_trace_finii(PERFC_TLS_POP_DONT_VERIFY);
 	return rc;
 }
 
