@@ -471,46 +471,41 @@ int cfs_ino_num_gen_fini(struct cfs_fs *cfs_fs)
 	return rc;
 }
 
-int cfs_tree_rename_link(struct cfs_fs *cfs_fs,
-			 const cfs_ino_t *parent_ino,
-			 const cfs_ino_t *ino,
-			 const str256_t *old_name,
-			 const str256_t *new_name)
+int cfs_tree_rename_link(struct cfs_fh *parent_fh, struct cfs_fh *child_fh,
+                         const str256_t *old_name, const str256_t *new_name)
 {
 	int rc;
 	struct kvstore *kvstor = kvstore_get();
 	struct kvs_idx index;
-	struct kvnode parent_node = KVNODE_INIT_EMTPY;
-	node_id_t id, pid;
+	struct stat *parent_stat = NULL;
+	struct cfs_fs *cfs_fs = NULL;
+	node_id_t *cnode_id = NULL;
+	node_id_t *pnode_id = NULL;
 
-	dassert(kvstor != NULL);
+	dassert(kvstor && parent_fh && child_fh && old_name && new_name);
 
+	cfs_fs = cfs_fs_from_fh(parent_fh);
 	index = cfs_fs->kvtree->index;
 
-	RC_WRAP_LABEL(rc, out, ino_to_node_id, parent_ino, &pid);
-	// The caller must ensure that the entry exists prior renaming */
-	dassert(kvtree_lookup(cfs_fs->kvtree, &pid, old_name, NULL) == 0);
+	pnode_id = cfs_node_id_from_fh(parent_fh);
 
-	RC_WRAP_LABEL(rc, out, ino_to_node_id, ino, &id);
+	/* The caller must ensure that the entry exists prior renaming */
+	dassert(kvtree_lookup(cfs_fs->kvtree, pnode_id, old_name, NULL) == 0);
 
-	RC_WRAP_LABEL(rc, out, kvtree_detach, cfs_fs->kvtree, &pid,
+	RC_WRAP_LABEL(rc, out, kvtree_detach, cfs_fs->kvtree, pnode_id,
 		      old_name);
 
-	RC_WRAP_LABEL(rc, out, kvtree_attach, cfs_fs->kvtree, &pid,
-		      &id, new_name);
+	cnode_id = cfs_node_id_from_fh(child_fh);
+	RC_WRAP_LABEL(rc, out, kvtree_attach, cfs_fs->kvtree, pnode_id,
+		      cnode_id, new_name);
 
 	// Update ctime stat
-	RC_WRAP_LABEL(rc, cleanup, cfs_kvnode_load, &parent_node,
-		      cfs_fs->kvtree, parent_ino);
-	RC_WRAP_LABEL(rc, cleanup, cfs_update_stat, &parent_node,
-		      STAT_CTIME_SET);
-
-cleanup:
-	kvnode_fini(&parent_node);
+	parent_stat = cfs_fh_stat(parent_fh);
+	RC_WRAP_LABEL(rc, out, cfs_amend_stat, parent_stat, STAT_CTIME_SET);
 
 out:
-	log_debug("tree_rename(%p,pino=%llu,ino=%llu,o=%.*s,n=%.*s) = %d",
-		  cfs_fs, *parent_ino, *ino,
+	log_debug("(%p,pino=%llu,ino=%llu,o=%.*s,n=%.*s) = %d",
+		  cfs_fs, *cfs_fh_ino(parent_fh), *cfs_fh_ino(child_fh),
 		  old_name->s_len, old_name->s_str,
 		  new_name->s_len, new_name->s_str, rc);
 	return rc;
