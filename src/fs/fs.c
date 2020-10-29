@@ -40,6 +40,80 @@ LIST_HEAD(list, cfs_fs_node) fs_list = LIST_HEAD_INITIALIZER();
 /* global endpoint operations for cortxfs*/
 static const struct cfs_endpoint_ops *g_e_ops;
 
+static int fs_node_init(struct cfs_fs_node *fs_node,
+			struct namespace *ns, size_t ns_size)
+{
+	int rc = 0;
+
+	str256_t *fs_name = NULL;
+	ns_get_name(ns, &fs_name);
+
+	fs_node->cfs_fs.ns = calloc(1, ns_size);
+	if (fs_node->cfs_fs.ns == NULL) {
+		goto out;
+	}
+
+	memcpy(fs_node->cfs_fs.ns, ns, ns_size);
+
+	fs_node->cfs_fs.kvtree = calloc(1, sizeof(struct kvtree));
+	if (!fs_node->cfs_fs.kvtree) {
+		rc = -ENOMEM;
+		goto kvtree_alloc_fail;
+	}
+
+	rc = kvtree_init(fs_node->cfs_fs.ns, fs_node->cfs_fs.kvtree);
+	if (rc != 0) {
+		log_err("failed to load FS: " STR256_F
+			" , kvtree_init() failed!",
+			STR256_P(fs_name));
+		goto kvtree_init_fail;
+	}
+
+	fs_node->cfs_fs.root_node = calloc(1, sizeof(struct kvnode));
+	if (!fs_node->cfs_fs.root_node) {
+		rc = -ENOMEM;
+		goto kvnode_alloc_fail;
+	}
+
+	*(fs_node->cfs_fs.root_node) = KVNODE_INIT_EMTPY;
+
+	rc = kvnode_load(fs_node->cfs_fs.kvtree,
+			 &(fs_node->cfs_fs.kvtree->root_node_id),
+			 fs_node->cfs_fs.root_node);
+	if (rc != 0) {
+		log_err("failed to load FS: " STR256_F
+			" , kvnode_load() failed!",
+			STR256_P(fs_name));
+		goto kvnode_load_fail;
+	}
+
+	goto out;
+
+kvnode_load_fail:
+	free(fs_node->cfs_fs.root_node);
+kvnode_alloc_fail:
+	kvtree_fini(fs_node->cfs_fs.kvtree);
+kvtree_init_fail:
+	free(fs_node->cfs_fs.kvtree);
+kvtree_alloc_fail:
+	free(fs_node->cfs_fs.ns);
+out:
+	if (rc != -ENOMEM) {
+		log_info("fs node initialization result for fs_name=" STR256_F 
+			 " rc=%d", STR256_P(fs_name), rc);
+	}
+	return rc;
+}
+
+void fs_node_deinit(struct cfs_fs_node *fs_node)
+{
+	kvnode_fini(fs_node->cfs_fs.root_node);
+	kvtree_fini(fs_node->cfs_fs.kvtree);
+	free(fs_node->cfs_fs.ns);
+	free(fs_node->cfs_fs.root_node);
+	free(fs_node->cfs_fs.kvtree);
+}
+
 static int cfs_fs_is_empty(const struct cfs_fs *fs)
 {
 	//@todo
@@ -92,94 +166,40 @@ void fs_ns_scan_cb(struct namespace *ns, size_t ns_size)
 {
 	str256_t *fs_name = NULL;
 	struct cfs_fs_node *fs_node = NULL;
+	int rc = 0;
 
 	/**
 	 * Before this fs can be added to the incore list fs_list, we must
-	 * prepare the incore structure to be usable by others, i.e.
-	 * the kvtree and namespace should be attached.
+	 * initialize the incore structure to be usable by others.
 	 */
 	ns_get_name(ns, &fs_name);
-	log_info("%d trying to load FS: " STR256_F,
-		 __LINE__, STR256_P(fs_name));
+	log_info("trying to load FS: " STR256_F,
+		 STR256_P(fs_name));
 
 	fs_node = calloc(1, sizeof(struct cfs_fs_node));
 	if (fs_node == NULL) {
-	    log_err("%d failed to load FS: " STR256_F
-		    " , could not allocate memory for cfs_fs_node!",
-		    __LINE__, STR256_P(fs_name));
-	    goto out_failed;
+		rc = -ENOMEM;
+		goto out;
 	}
 
-	fs_node->cfs_fs.ns = calloc(1, ns_size);
-	if (fs_node->cfs_fs.ns == NULL) {
-	    log_err("%d failed to load FS: " STR256_F
-		    " , could not allocate memory for ns object!",
-		    __LINE__, STR256_P(fs_name));
-	    goto out_failed;
+	rc = fs_node_init(fs_node, ns, ns_size);
+	if (rc != 0) {
+		goto fs_init_fail;
 	}
-
-	memcpy(fs_node->cfs_fs.ns, ns, ns_size);
-
-	fs_node->cfs_fs.kvtree = calloc(1, sizeof(struct kvtree));
-	if (!fs_node->cfs_fs.kvtree) {
-	    log_err("%d failed to load FS: " STR256_F
-		    " , could not allocate memory for kvtree object!",
-		    __LINE__, STR256_P(fs_name));
-	    goto out_failed;
-	}
-
-	if (kvtree_init(fs_node->cfs_fs.ns, fs_node->cfs_fs.kvtree) != 0) {
-	    log_err("%d failed to load FS: " STR256_F
-		    " , kvtree_init() failed!", __LINE__,
-		    STR256_P(fs_name));
-	    goto out_failed;
-	}
-
-	fs_node->cfs_fs.root_node = malloc(sizeof(struct kvnode));
-	if (!fs_node->cfs_fs.root_node) {
-		log_err("%d failed to load FS: " STR256_F
-			" , could not allocate memory for kvnode object!",
-			__LINE__, STR256_P(fs_name));
-		goto out_failed;
-	}
-
-	*(fs_node->cfs_fs.root_node) = KVNODE_INIT_EMTPY;
-
-	if (kvnode_load(fs_node->cfs_fs.kvtree,
-			&(fs_node->cfs_fs.kvtree->root_node_id),
-			fs_node->cfs_fs.root_node) != 0) {
-            log_err("%d failed to load FS: " STR256_F
-                    " , kvnode_load() failed!", __LINE__,
-                    STR256_P(fs_name));
-            goto out_failed;
-        }
 
 	LIST_INSERT_HEAD(&fs_list, fs_node, link);
 	log_info("FS:" STR256_F " loaded from disk, ptr:%p",
 		 STR256_P(fs_name), &fs_node->cfs_fs);
 	return;
 
-out_failed:
-
-	log_info("FS:" STR256_F " failed to load from disk",
-		 STR256_P(fs_name));
-
-	if (fs_node) {
-		if (fs_node->cfs_fs.ns) {
-			free(fs_node->cfs_fs.ns);
-		}
-		if (fs_node->cfs_fs.root_node) {
-			/* kvnode_fini is a no-op if root_node is not loaded */
-			kvnode_fini(fs_node->cfs_fs.root_node);
-			free(fs_node->cfs_fs.root_node);
-		}
-		if (fs_node->cfs_fs.kvtree) {
-			kvtree_fini(fs_node->cfs_fs.kvtree);
-			free(fs_node->cfs_fs.kvtree);
-		}
-
-		free(fs_node);
+fs_init_fail:
+	free(fs_node);
+out:
+	if (rc != -ENOMEM) {
+		log_info("FS:" STR256_F " failed to load from disk",
+			 STR256_P(fs_name));
 	}
+	return;
 }
 
 static int endpoint_tenant_scan_cb(void *cb_ctx, struct tenant *tenant)
@@ -270,12 +290,7 @@ int cfs_fs_fini(void)
 	LIST_FOREACH_SAFE(fs_node, &fs_list, link, fs_node_ptr) {
 		LIST_REMOVE(fs_node, link);
 		tenant_free(fs_node->cfs_fs.tenant);
-		kvnode_fini(fs_node->cfs_fs.root_node);
-		kvtree_fini(fs_node->cfs_fs.kvtree);
-	
-		free(fs_node->cfs_fs.ns);
-		free(fs_node->cfs_fs.root_node);
-		free(fs_node->cfs_fs.kvtree);
+		fs_node_deinit(fs_node);
 		free(fs_node);
 	}
 
@@ -332,7 +347,6 @@ int cfs_fs_create(const str256_t *fs_name)
 	struct namespace *ns;
 	struct cfs_fs_node *fs_node;
 	size_t ns_size = 0;
-	struct kvnode *root_node = NULL;
 
 	rc = cfs_fs_lookup(fs_name, NULL);
         if (rc == 0) {
@@ -343,18 +357,13 @@ int cfs_fs_create(const str256_t *fs_name)
         }
 
 	/* create new node in fs_list */
-	fs_node = malloc(sizeof(struct cfs_fs_node));
+	fs_node = calloc(1, sizeof(struct cfs_fs_node));
 	if (!fs_node) {
 		rc = -ENOMEM;
-		log_err("Could not allocate memory for cfs_fs_node");
 		goto out;
 	}
-	RC_WRAP_LABEL(rc, free_fs_node, ns_create, fs_name, &ns, &ns_size);
 
-	// Attach ns to cortxfs
-	fs_node->cfs_fs.ns = malloc(ns_size);
-	memcpy(fs_node->cfs_fs.ns, ns, ns_size);
-	fs_node->cfs_fs.tenant = NULL;
+	RC_WRAP_LABEL(rc, free_fs_node, ns_create, fs_name, &ns, &ns_size);
 
 	struct kvtree *kvtree = NULL;
 	struct stat bufstat;
@@ -370,59 +379,28 @@ int cfs_fs_create(const str256_t *fs_name)
 	bufstat.st_mtim.tv_sec = 0;
 	bufstat.st_ctim.tv_sec = 0;
 
-	RC_WRAP_LABEL(rc, free_info, kvtree_create, ns, (void *)&bufstat,
-	              sizeof(struct stat), &kvtree);
+	RC_WRAP_LABEL(rc, delete_ns, kvtree_create, ns, (void *)&bufstat,
+		      sizeof(struct stat), &kvtree);
 
-	/* Attach kvtree pointer to cortxfs struct */
-	fs_node->cfs_fs.kvtree = kvtree;
-
-	RC_WRAP_LABEL(rc, free_fs_node, kvtree_init, ns,
-		      fs_node->cfs_fs.kvtree);
-
-	root_node = malloc(sizeof(struct kvnode));
-	if (!root_node) {
-		rc = -ENOMEM;
-		log_err("Could not allocate memory for root kvnode");
-		goto free_fs_node;
-	}
-
-	*root_node = KVNODE_INIT_EMTPY;
-	RC_WRAP_LABEL(rc, free_fs_node, kvnode_load, kvtree, &(kvtree->root_node_id),
-		      root_node);
-	fs_node->cfs_fs.root_node = root_node;
-
-	RC_WRAP_LABEL(rc, free_fs_node, cfs_ino_num_gen_init,
+	RC_WRAP_LABEL(rc, delete_kvtree, fs_node_init, fs_node, ns, ns_size);
+	RC_WRAP_LABEL(rc, deinit_fs_node, cfs_ino_num_gen_init,
 		      &fs_node->cfs_fs);
 
-free_info:
+	LIST_INSERT_HEAD(&fs_list, fs_node, link);
+	goto out;
 
-	if (rc == 0) {
-		LIST_INSERT_HEAD(&fs_list, fs_node, link);
-		goto out;
-	}
-
+deinit_fs_node:
+	fs_node_deinit(fs_node);
+delete_kvtree:
+	kvtree_delete(kvtree);
+delete_ns:
+	ns_delete(ns);
 free_fs_node:
-	if (fs_node) {
-		if (fs_node->cfs_fs.ns)
-		{
-			free(fs_node->cfs_fs.ns);
-		}
-		if (root_node)
-		{
-			kvnode_fini(fs_node->cfs_fs.root_node);
-			free(fs_node->cfs_fs.root_node);
-		}
-		if (kvtree)
-		{
-			kvtree_fini(fs_node->cfs_fs.kvtree);
-			free(fs_node->cfs_fs.kvtree);
-		}
-
-		free(fs_node);
-	}
-
+	free(fs_node);
 out:
-	log_info("fs_name=" STR256_F " rc=%d", STR256_P(fs_name), rc);
+	if (rc != -ENOMEM) {
+		log_info("fs_name=" STR256_F " rc=%d", STR256_P(fs_name), rc);
+	}
         return rc;
 }
 
@@ -545,19 +523,18 @@ int cfs_fs_delete(const str256_t *fs_name)
 		goto out;
 	}
 
-	RC_WRAP_LABEL(rc, out, cfs_ino_num_gen_fini, fs);
-	RC_WRAP_LABEL(rc, out, kvtree_fini, fs->kvtree);
-
-	/* delete kvtree */
-	RC_WRAP_LABEL(rc, out, kvtree_delete, fs->kvtree);
-	fs->kvtree = NULL;
-
-	/* Remove fs from the cortxfs list */
+	/* Remove fs and its entries from the cortxfs list */
 	fs_node = container_of(fs, struct cfs_fs_node, cfs_fs);
 	LIST_REMOVE(fs_node, link);
-
+	RC_WRAP_LABEL(rc, out, cfs_ino_num_gen_fini, fs);
+	RC_WRAP_LABEL(rc, out, kvtree_fini, fs->kvtree);
+	kvnode_fini(fs->root_node);
+	RC_WRAP_LABEL(rc, out, kvtree_delete, fs->kvtree);
 	RC_WRAP_LABEL(rc, out, ns_delete, fs->ns);
-	fs->ns = NULL;
+
+	tenant_free(fs->tenant);
+	free(fs_node->cfs_fs.root_node);
+	free(fs_node);
 
 out:
 	log_info("fs_name=" STR256_F " rc=%d", STR256_P(fs_name), rc);

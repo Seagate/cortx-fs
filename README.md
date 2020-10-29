@@ -4,6 +4,12 @@
 
 The CORTX File System (FS) framework on top of the cloud object storage is the entry point for file access protocols (like NFS, CIFS). The CORTXFS makes use of the NSAL and DSAL libraries to provide the file system framework. The [NSAL library](https://github.com/Seagate/cortx-nsal) provides namespace for the file system framework and the [DSAL library](https://github.com/Seagate/cortx-dsal) provide data storage functionality for the file system framework.
 
+CORTXFS is CORTX File System framework on top of cloud object storage. It is
+the entry point for file access protocols (like NFS, CIFS). CORTXFS makes use
+of NSAL & DSAL libraries to provide the file system framework.
+NSAL library [cortx-nsal repo](https://github.com/Seagate/cortx-nsal) provides
+name space for the file system framework and DSAL library [cortx-dsal repo](https://github.com/Seagate/cortx-dsal) provide data storage functionality for the file system framework.
+
 ### Disclaimer
 Please refer to the shared [disclaimer](https://github.com/Seagate/cortx-posix#disclaimer) about this code repository.
 
