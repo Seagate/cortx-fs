@@ -20,6 +20,7 @@
 #include "ut_cortxfs_helper.h"
 #include <sys/xattr.h> /* XATTR_CREATE */
 
+#define XATTR_NAME_SIZE_MAX 255
 #define XATTR_VAL_SIZE_MAX 4096
 #define XATTR_ENV_FROM_STATE(__state) (*((struct ut_xattr_env **)__state))
 
