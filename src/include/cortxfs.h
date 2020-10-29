@@ -197,14 +197,20 @@ int cfs_create_entry(struct cfs_fh *parent_fh, cfs_cred_t *cred, char *name,
                      enum cfs_file_type type);
 
 /******************************************************************************/
-/** Change the name of a link between a parent node and a child node without
+/**  */
+/**
+ * Change the name of a link between a parent node and a child node without
  * modifying the link itself.
+
+ * @param parent_fh - Parent file handle
+ * @param child_fh - Child file handle
+ * @param old_name - Old file name
+ * @param new_name - New file name to be replaced with for old file
+ *
+ * @return 0 if successful, a negative "-errno" value in case of failure
  */
-int cfs_tree_rename_link(struct cfs_fs *cfs_fs,
-			 const cfs_ino_t *parent_ino,
-			 const cfs_ino_t *ino,
-			 const str256_t *old_name,
-			 const str256_t *new_name);
+int cfs_tree_rename_link(struct cfs_fh *parent_fh, struct cfs_fh *child_fh,
+                         const str256_t *old_name, const str256_t *new_name);
 
 /******************************************************************************/
 /* CORTXFS internal data types */
