@@ -1,17 +1,17 @@
 [![Codacy Badge](https://api.codacy.com/project/badge/Grade/a00c3917c3514e9b94bb8a181ba6db2e)](https://app.codacy.com/gh/Seagate/cortx-fs?utm_source=github.com&utm_medium=referral&utm_content=Seagate/cortx-fs&utm_campaign=Badge_Grade)
 
-# CORTX-FS
+# CORTXFS
 
-The CORTX File System (FS) framework on top of the cloud object storage is the entry point for file access protocols (like NFS, CIFS). The CORTX-FS makes use of the NSAL and DSAL libraries to provide the file system framework. The [NSAL library](https://github.com/Seagate/cortx-nsal) provides namespace for the file system framework and the [DSAL library](https://github.com/Seagate/cortx-dsal) provide data storage functionality for the file system framework.
+The CORTX File System (FS) framework on top of the cloud object storage is the entry point for file access protocols (like NFS, CIFS). The CORTXFS makes use of the NSAL and DSAL libraries to provide the file system framework. The [NSAL library](https://github.com/Seagate/cortx-nsal) provides namespace for the file system framework and the [DSAL library](https://github.com/Seagate/cortx-dsal) provide data storage functionality for the file system framework.
 
 ### Disclaimer
 Please refer to the shared [disclaimer](https://github.com/Seagate/cortx-posix#disclaimer) about this code repository.
 
-## Get CORTX-FS ready! 
+## Get CORTXFS ready! 
 
-Refer to the [CORTX-FS Quickstart Guide](./doc/CortxFSQuickStart.md) to build and test the CORTX-FS Component.
+Refer to the [CORTXFS Quickstart Guide](./doc/CortxFSQuickStart.md) to build and test the CORTXFS Component.
 
-## Contribute to CORTX-FS
+## Contribute to CORTXFS
 
 We are excited about your interest in CORTX and hope you will join us. We take our community very seriously, and we are committed to creating a community built on respectful interactions and inclusivity, as documented in our [Code of conduct](CODE_OF_CONDUCT.md).
 
