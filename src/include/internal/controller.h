@@ -28,10 +28,12 @@
  * #		Control-Server: CONTROLLER Types.			#
  * ######################################################################
  */
-#define CONTROLLER_MAP(XX)		\
-	XX(FS,		fs)		\
-	XX(ENDPOINT,	endpoint)	\
-	XX(AUTH,	auth)
+#define CONTROLLER_MAP(XX)      \
+    XX(FS, fs)                  \
+    XX(ENDPOINT, endpoint)      \
+    XX(AUTH, auth)              \
+    XX(APIDOCS, apidocs)
+
 /**
  * Not supporeted yet.
  * Add to the CONTROLER_MAP as and when supported.
@@ -106,5 +108,18 @@ enum auth_api_id {
 };
 
 #define AUTH_API_COUNT   (0+AUTH_API_MAP(COUNT))
+
+/* -------------------- api-docs controller APIs--------------------*/
+
+#define APIDOCS_API_MAP(XX)		\
+	XX(GET, get, GET)		\
+
+enum apidocs_api_id {
+#define XX(uc, lc, _)	APIDOCS_ ## uc ## _ID,
+	APIDOCS_API_MAP(XX)
+#undef XX
+};
+
+#define APIDOCS_API_COUNT   (0+APIDOCS_API_MAP(COUNT))
 
 #endif

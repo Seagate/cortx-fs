@@ -15,6 +15,7 @@ SET(control_LIB_SRCS
 	fs.c
 	endpoint.c
 	auth_setup.c
+	api_docs.c
 )
 
 add_library(management OBJECT ${control_LIB_SRCS})
