@@ -347,6 +347,7 @@ int cfs_fs_create(const str256_t *fs_name)
 	struct namespace *ns;
 	struct cfs_fs_node *fs_node;
 	size_t ns_size = 0;
+	struct kvstore *kvstor = NULL;
 
 	rc = cfs_fs_lookup(fs_name, NULL);
         if (rc == 0) {
@@ -387,6 +388,16 @@ int cfs_fs_create(const str256_t *fs_name)
 		      &fs_node->cfs_fs);
 
 	LIST_INSERT_HEAD(&fs_list, fs_node, link);
+
+	/* 
+	 * We have made a copy of namespace and kvtree.
+	 * free the data structures else they will leak.
+	 */
+	kvstor = kvstore_get();
+	dassert(kvstor);
+	kvs_free(kvstor, kvtree);
+	kvs_free(kvstor, ns);
+
 	goto out;
 
 deinit_fs_node:
