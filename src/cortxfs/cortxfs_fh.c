@@ -30,6 +30,7 @@
 #include <common/log.h> /* log_err() */
 #include "kvtree.h" /* kvtree_lookup() */
 #include "operation.h" /* perf tracepoints */
+#include <addb/cfs_perfc.h>
 
 /**
  * A unique key to be used in containers (maps, sets).

@@ -29,6 +29,7 @@
 #include "kvtree.h"
 #include <errno.h>
 #include "operation.h"
+#include <addb/cfs_perfc.h>
 
 int cfs_creat(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_ino_t *parent_ino,
               char *name, mode_t mode, cfs_ino_t *newfile_ino)

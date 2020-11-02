@@ -31,6 +31,7 @@
 #include <common.h> /* likely */
 #include "kvtree.h"
 #include "operation.h"
+#include <addb/cfs_perfc.h>
 
 /* Internal cortxfs structure which holds the information given
  * by upper layer in case of readdir operation

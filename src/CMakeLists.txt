@@ -99,10 +99,15 @@ set(FS fs)
 add_subdirectory(management)
 set(MANAGEMENT management)
 
+# Add ADDB Plugin sources
+add_subdirectory(addb)
+set(UTILS_ADDB_PLUGIN utils-addb-plugin)
+
 add_library(${LIB_FS} SHARED
 		$<TARGET_OBJECTS:${CORTXFS}>
 		$<TARGET_OBJECTS:${FS}>
 		$<TARGET_OBJECTS:${MANAGEMENT}>
+		$<TARGET_OBJECTS:${UTILS_ADDB_PLUGIN}>
 	)
 
 target_link_libraries(${LIB_FS}
