@@ -74,8 +74,7 @@ struct cfs_fh {
 /** Initialize an empty invalid FH instance */
 #define CFS_FH_INIT (struct cfs_fh) { .f_node = KVNODE_INIT_EMTPY }
 
-static inline
-bool cfs_fh_invariant(const struct cfs_fh *fh)
+inline bool cfs_fh_invariant(const struct cfs_fh *fh)
 {
 	bool rc = false;
 

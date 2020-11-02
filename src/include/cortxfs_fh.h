@@ -118,6 +118,12 @@
 #include "nsal.h"
 struct cfs_fh;
 
+/* An invariant to check supplied fh is valid or not
+ * @param[in] cred - User credentials.
+ * @return true if fh is valid otherwise false
+ */
+inline bool cfs_fh_invariant(const struct cfs_fh *fh);
+
 /* The example of CORTXFS API described below allocates new file handles in
  * heap. Later we can change that to use in-place allocated structures to
  * avoid extra malloc/free calls.
