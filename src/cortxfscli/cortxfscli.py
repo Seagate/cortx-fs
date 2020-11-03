@@ -70,7 +70,7 @@ cortxfscli_default_validation_rules = """{
 			"clients" : {"regex" : "[^A-Za-z0-9.*/]", "limit" : "100"},
 			"Squash" : {"set" : "no_root_squash,root_squash"},
 			"access_type" : {"set" : "RW,R,W,None"},
-			"protocols" : {"set" : "4,4.1"},
+			"protocols" : {"set" : "3,4,4.1,3:4"},
 			"pnfs_enabled" : {"set" : "true,false"}
 	},
 
@@ -572,6 +572,8 @@ class RestClient(Client):
 					for option_token in option_list:
 						option = option_token.split('=')
 						key = option[0]
+						if option[0] == 'protocols' and option[1] == '3:4':
+							option[1] = '3,4'
 						val = option[1]
 						content["options"].update({key : val});
 
