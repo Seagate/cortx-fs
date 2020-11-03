@@ -31,6 +31,7 @@
 #include <common.h> /* likely */
 #include "kvtree.h"
 #include "operation.h"
+#include <cfs_perfc.h>
 
 static int cfs_detach2(struct cfs_fh *parent_fh, struct cfs_fh *child_fh,
                        const cfs_cred_t *cred, const char *name);
