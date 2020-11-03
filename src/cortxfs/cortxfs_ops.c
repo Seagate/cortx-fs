@@ -905,22 +905,74 @@ int cfs_rmdir(struct cfs_fs *cfs_fs, cfs_cred_t *cred,
 	return rc;
 }
 
+int cfs_unlink2(struct cfs_fh *parent_fh, struct cfs_fh *child_fh,
+                cfs_cred_t *cred, char *name)
+{
+	int rc;
+
+	dassert(parent_fh && child_fh && cred && name);
+	dassert(cfs_fh_invariant(parent_fh));
+	dassert(cfs_fh_invariant(child_fh));
+
+	RC_WRAP_LABEL(rc, out, cfs_detach2, parent_fh, child_fh, cred, name);
+	RC_WRAP_LABEL(rc, out, cfs_destroy_orphaned_file2, child_fh);
+
+out:
+	log_debug("cfs_fs=%p parent_ino=%llu child_ino=%llu name=%s rc=%d",
+		  cfs_fs_from_fh(parent_fh), *cfs_fh_ino(parent_fh),
+		  *cfs_fh_ino(child_fh), name, rc);
+	return rc;
+}
+
+
 int cfs_unlink(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_ino_t *dir,
 	       cfs_ino_t *fino, char *name)
 {
 	int rc;
-	cfs_ino_t ino;
+	cfs_ino_t child_ino = 0LL;
+	struct stat *child_stat = NULL;
+	struct cfs_fh *child_fh = NULL;
+	struct cfs_fh *parent_fh = NULL;
+
+	dassert(cfs_fs && cred && dir && name);
+
+	/* TODO:Temp_FH_op - to be removed
+	 * Should get rid of creating and destroying FH operation in this
+	 * API when caller pass the valid FH instead of inode number
+	 */
+	RC_WRAP_LABEL(rc, out, cfs_fh_from_ino, cfs_fs, dir,
+		      &parent_fh);
 
 	if (likely(fino != NULL)) {
-		ino = *fino;
+		RC_WRAP_LABEL(rc, out, cfs_fh_from_ino, cfs_fs, fino,
+			      &child_fh);
+		child_ino = *fino;
 	} else {
-		RC_WRAP_LABEL(rc, out, cfs_lookup, cfs_fs, cred, dir, name, &ino);
+		RC_WRAP_LABEL(rc, out, cfs_fh_lookup, cred, parent_fh, name,
+			      &child_fh);
+		child_ino = *cfs_fh_ino(child_fh);
 	}
 
-	RC_WRAP_LABEL(rc, out, cfs_detach, cfs_fs, cred, dir, &ino, name);
-	RC_WRAP_LABEL(rc, out, cfs_destroy_orphaned_file, cfs_fs, &ino);
+	child_stat = cfs_fh_stat(child_fh);
+	RC_WRAP_LABEL(rc, out, cfs_unlink2, parent_fh, child_fh, cred, name);
 
 out:
+	if (parent_fh != NULL) {
+		cfs_fh_destroy_and_dump_stat(parent_fh);
+	}
+
+	if (child_fh != NULL) {
+		dassert(child_stat);
+
+		if (cfs_file_has_links(child_stat)) {
+			cfs_fh_destroy_and_dump_stat(child_fh);
+		} else {
+			cfs_fh_destroy(child_fh);
+		}
+	}
+
+	log_debug("cfs_fs=%p parent_ino=%llu child_ino=%llu name=%s rc=%d",
+		  cfs_fs, *dir, child_ino, name, rc);
 	return rc;
 }
 
@@ -966,8 +1018,8 @@ out:
 		kvs_discard_transaction(kvstor, &index);
 	}
 
-	log_trace("parent_ino=%llu name=%s child_ino=%llu rc=%d",
-		  (unsigned long long int)parent_stat->st_ino, name,
+	log_trace("cfs_fs=%p parent_ino=%llu name=%s child_ino=%llu rc=%d",
+		  cfs_fs, (unsigned long long int)parent_stat->st_ino, name,
 		  (unsigned long long int)child_stat->st_ino, rc);
 
 	return rc;
@@ -998,7 +1050,7 @@ out:
 		cfs_fh_destroy_and_dump_stat(child_fh);
 	}
 
-	log_trace("parent_ino=%llu name=%s child_ino=%llu rc=%d",
-		  *parent_ino, name, *child_ino, rc);
+	log_trace("cfs_fs=%p parent_ino=%llu name=%s child_ino=%llu rc=%d",
+		  cfs_fs, *parent_ino, name, *child_ino, rc);
 	return rc;
 }
