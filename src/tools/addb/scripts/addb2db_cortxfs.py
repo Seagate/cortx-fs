@@ -60,6 +60,7 @@ class entity_states(BaseModel):
     time        = IntegerField()
     tsdb_mod    = TextField()
     fn_tag      = TextField()
+    sm_tag      = TextField()
     entity_type = TextField()
     opid        = IntegerField()
     state_type  = TextField()
@@ -69,6 +70,7 @@ class entity_attributes(BaseModel):
     time        = IntegerField()
     tsdb_mod    = TextField()
     fn_tag      = TextField()
+    sm_tag      = TextField()
     entity_type = TextField()
     opid        = IntegerField()
     attr_name   = TextField()
@@ -79,6 +81,7 @@ class entity_maps(BaseModel):
     time        = IntegerField()
     tsdb_mod    = TextField()
     fn_tag      = TextField()
+    sm_tag      = TextField()
     entity_type = TextField()
     map_name    = IntegerField()
     src_opid    = IntegerField()
@@ -148,9 +151,10 @@ class ADDB2PPNFS:
         ret['time'] = ADDB2PPNFS.to_unix(row[1])
         ret['tsdb_mod'] = row[2]
         ret['fn_tag'] = row[3]
-        ret['entity_type'] = row[4]
-        ret['opid'] = int(row[5], 16)
-        ret['state_type'] = row[6]
+        ret['sm_tag'] = row[4]
+        ret['entity_type'] = row[5]
+        ret['opid'] = int(row[6], 16)
+        ret['state_type'] = row[7]
         return((table, ret))
 
     # [ '*',
@@ -168,11 +172,12 @@ class ADDB2PPNFS:
         ret['time'] = ADDB2PPNFS.to_unix(row[1])
         ret['tsdb_mod'] = row[2]
         ret['fn_tag'] = row[3]
-        ret['entity_type'] = row[4]
-        ret['opid'] = int(row[5], 16)
-        ret['attr_name'] = row[6]
+        ret['sm_tag'] = row[4]
+        ret['entity_type'] = row[5]
+        ret['opid'] = int(row[6], 16)
+        ret['attr_name'] = row[7]
         if ret['attr_name'].find("attr_time") == -1:
-            ret['attr_val'] = int(row[7], 16)
+            ret['attr_val'] = int(row[8], 16)
         else:
             ret['attr_val'] = "NA"
         return((table, ret))
@@ -192,11 +197,12 @@ class ADDB2PPNFS:
         ret['time'] = ADDB2PPNFS.to_unix(row[1])
         ret['tsdb_mod'] = row[2]
         ret['fn_tag'] = row[3]
-        ret['entity_type'] = row[4]
-        ret['map_name'] = int(row[5], 16)
-        ret['src_opid'] = int(row[6], 16)
-        ret['dst_opid'] = int(row[7], 16)
-        ret['clr_opid'] = int(row[8], 16)
+        ret['sm_tag'] = row[4]
+        ret['entity_type'] = row[5]
+        ret['map_name'] = int(row[6], 16)
+        ret['src_opid'] = int(row[7], 16)
+        ret['dst_opid'] = int(row[8], 16)
+        ret['clr_opid'] = int(row[9], 16)
         return((table, ret))
 
     def __init__(self):
@@ -219,7 +225,7 @@ class ADDB2PPNFS:
         row=  [s.strip('?') for s in row]
         if row== []:
             return
-        measurement_name = row[4]
+        measurement_name = row[5]
         labels=measurement_name
 
         for pname, (parser, table) in self.parsers.items():
@@ -295,16 +301,16 @@ def db_setup_loggers():
 
 def db_parse_args():
     parser = argparse.ArgumentParser(description="""
-addb2db_nfs.py: creates sql database containing performance samples from cortxfs
+addb2db_cortxfs.py: creates sql database containing performance samples from cortxfs
     """)
     parser.add_argument('--dumps', nargs='+', type=str, required=False,
                         default=["dump.txt", "dump_s.txt"],
                         help="""
 A bunch of addb2dump.txts can be passed here for processing:
-python3 addb2db_nfs.py --dumps dump1.txt dump2.txt ...
+python3 addb2db_cortxfs.py --dumps dump1.txt dump2.txt ...
 """)
     parser.add_argument('--db', type=str, required=False,
-                        default="nfscortxfs.db",
+                        default="cortxfs.db",
                         help="Output database file")
     parser.add_argument('--procs', type=int, required=False,
                         default=PROC_NR,
