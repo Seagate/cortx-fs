@@ -29,6 +29,8 @@
 #include <common.h> /* unlikely */
 #include <common/log.h> /* log_err() */
 #include "kvtree.h" /* kvtree_lookup() */
+#include "operation.h" /* perf tracepoints */
+#include <cfs_perfc.h>
 
 /**
  * A unique key to be used in containers (maps, sets).
@@ -73,8 +75,7 @@ struct cfs_fh {
 /** Initialize an empty invalid FH instance */
 #define CFS_FH_INIT (struct cfs_fh) { .f_node = KVNODE_INIT_EMTPY }
 
-static inline
-bool cfs_fh_invariant(const struct cfs_fh *fh)
+inline bool cfs_fh_invariant(const struct cfs_fh *fh)
 {
 	bool rc = false;
 
@@ -110,12 +111,26 @@ struct stat *cfs_fh_stat(const struct cfs_fh *fh)
 	return cfs_get_stat2(&fh->f_node);
 }
 
+struct kvnode *cfs_kvnode_from_fh(struct cfs_fh *fh)
+{
+	dassert(fh);
+	dassert(cfs_fh_invariant(fh));
+	return &fh->f_node;
+}
+
 static inline
 void cfs_fh_init_key(struct cfs_fh *fh)
 {
 	struct stat *stat = cfs_fh_stat(fh);
 	fh->key.file = stat->st_ino;
 	fh->key.fs = fh->fs;
+}
+
+node_id_t *cfs_node_id_from_fh(struct cfs_fh *fh)
+{
+	dassert(fh);
+	dassert(cfs_fh_invariant(fh));
+	return &fh->f_node.node_id;
 }
 
 cfs_ino_t *cfs_fh_ino(struct cfs_fh *fh)
@@ -159,8 +174,9 @@ out:
 	return rc;
 }
 
-int cfs_fh_lookup(const cfs_cred_t *cred, struct cfs_fh *parent_fh,
-                  const char *name, struct cfs_fh **fh)
+static inline int __cfs_fh_lookup(const cfs_cred_t *cred,
+				  struct cfs_fh *parent_fh,
+				  const char *name, struct cfs_fh **fh)
 {
 	int rc;
 	str256_t kname;
@@ -212,6 +228,18 @@ out:
 	if (newfh) {
 		cfs_fh_destroy(newfh);
 	}
+	return rc;
+}
+
+int cfs_fh_lookup(const cfs_cred_t *cred, struct cfs_fh *parent_fh,
+                const char *name, struct cfs_fh **fh)
+{
+	int rc;
+
+	perfc_trace_inii(PFT_CFS_LOOKUP, PEM_CFS_TO_NFS);
+	rc = __cfs_fh_lookup(cred, parent_fh, name, fh);
+	perfc_trace_finii(PERFC_TLS_POP_VERIFY);
+
 	return rc;
 }
 

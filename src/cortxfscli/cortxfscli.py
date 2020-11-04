@@ -71,8 +71,7 @@ cortxfscli_default_validation_rules = """{
 			"Squash" : {"set" : "no_root_squash,root_squash"},
 			"access_type" : {"set" : "RW,R,W,None"},
 			"protocols" : {"set" : "4,4.1"},
-			"pnfs_enabled" : {"set" : "true,false"},
-			"data_server" : {"regex" : "[^A-Za-z0-9.*/]", "limit" : "16"}
+			"pnfs_enabled" : {"set" : "true,false"}
 	},
 
 	"smb" : {

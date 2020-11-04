@@ -122,3 +122,56 @@ the key, its better to either create a new key for that purpose or expose a new
 version of the api and modify the key contents in the new version.
 </pre>
 </details>
+
+# JSON Error Response Schema :
+
+To be consistent in returning errors(when using REST API) with other components
+such as S3, we will follow the error format that S3 currently uses 
+(Schema shown below).
+
+<details>
+<summary>Schema</summary>
+<pre>
+
+```
+{
+  "$schema": "http://json-schema.org/draft-04/schema#",
+  "type": "object",
+  "properties": {
+    "error_code": {
+      "type": "string"
+    },
+    "message_id": {
+      "type": "string"
+    },
+    "message": {
+      "type": "string"
+    },
+    "error_format_args": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "error_code",
+    "message"
+  ]
+}
+```
+
+</pre>
+</details>
+
+<details>
+<summary>Example</summary>
+<pre>
+
+```
+{
+    "error_code": 3,
+    "message": "Incorrect Parameters"
+}
+```
+
+</pre>
+</details>
+
