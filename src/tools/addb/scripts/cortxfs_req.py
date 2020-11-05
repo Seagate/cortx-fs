@@ -83,6 +83,7 @@ def gen_perfc_op_call_graph(fsal_op_id: int=None, op_file: str="cortxfs_perfc_gr
     graph = ext_graph if ext_graph is not None else Digraph(
         strict=True, format='png', node_attr = {'shape': 'plaintext'})
 
+    attr_time_end_id = 0
     for state in states:
         if state['opid'] == fsal_op_id:
             if state['state_type'] in "init":
@@ -95,6 +96,7 @@ def gen_perfc_op_call_graph(fsal_op_id: int=None, op_file: str="cortxfs_perfc_gr
                 # print (node_content)
                 t0 = state['time']
                 graph_node_add(graph, f"init{state['opid']}", "{} {}".format(state['fn_tag'], state['state_type']), node_content)
+                graph, attr_time_end_id = m0callgraph(graph, state, attrs)
 
             if state['state_type'] in "finish":
                 # print (state['time'], state['fn_tag'], state['state_type'])
@@ -102,9 +104,12 @@ def gen_perfc_op_call_graph(fsal_op_id: int=None, op_file: str="cortxfs_perfc_gr
                 # print (node_content)
                 t1 = state['time']
                 graph_node_add(graph, f"finish{state['opid']}", "{} {}".format(state['fn_tag'], state['state_type']), node_content)
-                graph.edge(f"init{state['opid']}", f"finish{state['opid']}", label="{} us".format(str(t1 - t0)))
+                graph.edge(f"init{state['opid']}", f"finish{state['opid']}", label="{} ns".format(str(t1 - t0)))
+                if attr_time_end_id != 0:
+                    graph.edge( f"m0childfinish{attr_time_end_id}", f"finish{state['opid']}")
 
     for mp in maps:
+        attr_time_end_id = 0
         for state in states:
             if state['opid'] == mp['src_opid']:
                 if state['state_type'] in "init":
@@ -117,6 +122,7 @@ def gen_perfc_op_call_graph(fsal_op_id: int=None, op_file: str="cortxfs_perfc_gr
                     # print (node_content)
                     t0 = state['time']
                     graph_node_add(graph, f"childinit{state['opid']}", "{} {}".format(state['fn_tag'], state['state_type']), node_content)
+                    graph, attr_time_end_id = m0callgraph(graph, state, attrs)
 
                 if state['state_type'] in "finish":
                     # print (state['time'], state['fn_tag'], state['state_type'])
@@ -124,7 +130,9 @@ def gen_perfc_op_call_graph(fsal_op_id: int=None, op_file: str="cortxfs_perfc_gr
                     # print (node_content)
                     t1 = state['time']
                     graph_node_add(graph, f"childfinish{state['opid']}", "{} {}".format(state['fn_tag'], state['state_type']), node_content)
-                    graph.edge(f"childinit{state['opid']}", f"childfinish{state['opid']}", label="{} us".format(str(t1 - t0)))
+                    graph.edge(f"childinit{state['opid']}", f"childfinish{state['opid']}", label="{} ns".format(str(t1 - t0)))
+                    if attr_time_end_id != 0:
+                        graph.edge( f"m0childfinish{attr_time_end_id}", f"childfinish{state['opid']}")
 
     for mp in maps:
         if mp['clr_opid'] == fsal_op_id:
@@ -140,6 +148,28 @@ def gen_perfc_op_call_graph(fsal_op_id: int=None, op_file: str="cortxfs_perfc_gr
     print ("Graph render completed")
 
     return
+
+def m0callgraph(graph, state, attrs):
+    attr_time_start_id = 0
+    attr_time_end_id = 0
+    for attr in attrs:
+        if attr['opid'] == state['opid']:
+            if attr['attr_name'].find("attr_time_start") != -1:
+                m0_node_content = {'op start time': attr['time']}
+                m0_t0 = attr['time']
+                graph_node_add(graph, f"m0childinit{attr['id']}", attr['attr_name'], m0_node_content)
+                attr_time_start_id = attr['id']
+                if attr_time_end_id == 0:
+                    graph.edge(f"childinit{state['opid']}", f"m0childinit{attr_time_start_id}")
+                else:
+                    graph.edge(f"m0childfinish{attr_time_end_id}", f"m0childinit{attr_time_start_id}")
+            if attr['attr_name'].find("attr_time_end") != -1:
+                m0_node_content = {'op end time': attr['time']}
+                m0_t1 = attr['time']
+                graph_node_add(graph, f"m0childfinish{attr['id']}", attr['attr_name'], m0_node_content)
+                attr_time_end_id = attr['id']
+                graph.edge(f"m0childinit{attr_time_start_id}", f"m0childfinish{attr_time_end_id}", label="{} ns".format(str(m0_t1 - m0_t0)))
+    return graph, attr_time_end_id
 
 def parse_args():
     parser = argparse.ArgumentParser(prog=sys.argv[0], description="""
