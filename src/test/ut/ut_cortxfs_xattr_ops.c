@@ -408,10 +408,15 @@ int listxattr_test_setup(void **state)
 	struct ut_xattr_env *ut_xattr_obj = XATTR_ENV_FROM_STATE(state);
 	struct ut_cfs_params *ut_cfs_obj = &ut_xattr_obj->ut_cfs_obj;
 
-	ut_xattr_obj->xattr[0] = file_name;
+
+	ut_xattr_obj->xattr = malloc(sizeof(char *) * (xattr_set_cnt+1));
+	ut_xattr_obj->xattr[0] = malloc(sizeof(char) * (strnlen(file_name, XATTR_NAME_SIZE_MAX)+1));
+	memcpy(ut_xattr_obj->xattr[0], file_name, (strnlen(file_name, XATTR_NAME_SIZE_MAX)+1));
 	for (i = 0; i<xattr_set_cnt; i++) {
-		ut_xattr_obj->xattr[i+1] = xattr_name[i];
+		ut_xattr_obj->xattr[i+1] = malloc(sizeof(char) * (strnlen(xattr_name[i], XATTR_NAME_SIZE_MAX)+1));
+		memcpy(ut_xattr_obj->xattr[i+1], xattr_name[i], (strnlen(xattr_name[i], XATTR_NAME_SIZE_MAX)+1));
 	}
+
 
 	rc = cfs_creat(ut_cfs_obj->cfs_fs, &ut_cfs_obj->cred,
 			&ut_cfs_obj->current_inode, file_name, 0755, &file_inode);
@@ -494,7 +499,7 @@ void listxattr_test(void **state)
  */
 int listxattr_test_teardown(void **state)
 {
-	int rc = 0;
+	int i, count, rc = 0;
 	struct ut_xattr_env *ut_xattr_obj = XATTR_ENV_FROM_STATE(state);
 	struct ut_cfs_params *ut_cfs_obj = &ut_xattr_obj->ut_cfs_obj;
 
@@ -502,6 +507,13 @@ int listxattr_test_teardown(void **state)
 		&ut_cfs_obj->current_inode, NULL, ut_xattr_obj->xattr[0]);
 
 	ut_assert_int_equal(rc, 0);
+
+	count = sizeof(ut_xattr_obj->xattr)/sizeof(ut_xattr_obj->xattr[0]);
+	for(i=0; i<count; i++)
+	{
+		free(ut_xattr_obj->xattr[i]);
+	}
+	free(ut_xattr_obj->xattr);
 
 	return rc;
 }
