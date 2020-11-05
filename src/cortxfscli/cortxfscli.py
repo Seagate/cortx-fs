@@ -68,6 +68,7 @@ cortxfscli_default_validation_rules = """{
 			"Filesystem_id" : {"regex" : "[^0-9+.0-9+$]", "limit" : "100"},
 			"client" : {"max_count" : "10"},
 			"clients" : {"regex" : "[^A-Za-z0-9.*/]", "limit" : "100"},
+			"disable_acl" : {"set" : "true,false"},
 			"Squash" : {"set" : "no_root_squash,root_squash"},
 			"access_type" : {"set" : "RW,R,W,None"},
 			"protocols" : {"set" : "3,4,4.1,3:4"},
