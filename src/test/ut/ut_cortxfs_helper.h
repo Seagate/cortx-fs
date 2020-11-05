@@ -28,6 +28,7 @@
 #include "namespace.h"
 #include "ut.h"
 #include "cortxfs.h"
+#include "cortxfs_fh.h"
 
 #define DEFAULT_CONFIG "/etc/cortx/cortxfs.conf"
 #define CONF_FILE "/tmp/cortxfs/build-cortxfs/test/ut/ut_cortxfs.conf"

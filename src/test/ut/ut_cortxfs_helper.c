@@ -14,7 +14,7 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  * For any questions about this software or licensing,
- * please email opensource@seagate.com or cortx-questions@seagate.com. 
+ * please email opensource@seagate.com or cortx-questions@seagate.com.
  */
 
 #include "ut_cortxfs_helper.h"
@@ -102,14 +102,19 @@ int ut_file_create(void **state)
 {
 	int rc = 0;
 	struct ut_cfs_params *ut_cfs_obj = ENV_FROM_STATE(state);
+	cfs_ino_t *pinode = &ut_cfs_obj->parent_inode;
+	struct cfs_fh *parent_fh = NULL;
 
-	rc = cfs_creat(ut_cfs_obj->cfs_fs, &ut_cfs_obj->cred,
-			&ut_cfs_obj->parent_inode, ut_cfs_obj->file_name, 0755,
-			&ut_cfs_obj->file_inode);
+	rc = cfs_fh_from_ino(ut_cfs_obj->cfs_fs, pinode, &parent_fh);
+	ut_assert_int_equal(rc, 0);
+
+	rc = cfs_creat(parent_fh, &ut_cfs_obj->cred, ut_cfs_obj->file_name,
+		       0755, &ut_cfs_obj->file_inode);
 	if (rc) {
 		printf("Failed to create file %s\n", ut_cfs_obj->file_name);
 	}
 
+	cfs_fh_destroy_and_dump_stat(parent_fh);
 	return rc;
 }
 
