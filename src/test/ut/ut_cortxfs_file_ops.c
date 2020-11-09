@@ -66,20 +66,29 @@ static void create_file(void **state)
 {
 	int rc = 0;
 	struct ut_cfs_params *ut_cfs_obj = ENV_FROM_STATE(state);
+	cfs_ino_t *pinode = &ut_cfs_obj->current_inode;
+	cfs_ino_t *cinode = NULL;
+	struct cfs_fh *parent_fh = NULL;
+	struct cfs_fh *child_fh = NULL;
 
 	cfs_ino_t file_inode = 0LL;
 
-	rc = cfs_creat(ut_cfs_obj->cfs_fs, &ut_cfs_obj->cred,
-			&ut_cfs_obj->current_inode, ut_cfs_obj->file_name, 0755,
-			&file_inode);
-
+	rc = cfs_fh_from_ino(ut_cfs_obj->cfs_fs, pinode, &parent_fh);
 	ut_assert_int_equal(rc, 0);
 
-	rc = cfs_lookup(ut_cfs_obj->cfs_fs, &ut_cfs_obj->cred,
-			&ut_cfs_obj->parent_inode, ut_cfs_obj->file_name,
-			&file_inode);
-
+	rc = cfs_creat(parent_fh, &ut_cfs_obj->cred, ut_cfs_obj->file_name,
+		       0755, &file_inode);
 	ut_assert_int_equal(rc, 0);
+
+	rc = cfs_fh_lookup(&ut_cfs_obj->cred, parent_fh, ut_cfs_obj->file_name,
+			   &child_fh);
+	ut_assert_int_equal(rc, 0);
+
+	cinode = cfs_fh_ino(child_fh);
+	ut_assert_int_equal(file_inode, *cinode);
+
+	cfs_fh_destroy(child_fh);
+	cfs_fh_destroy_and_dump_stat(parent_fh);
 }
 
 /**
@@ -107,36 +116,31 @@ static void verify_file_handle(void **state)
 {
 	int rc = 0;
 	struct ut_cfs_params *ut_cfs_obj = ENV_FROM_STATE(state);
-	struct cfs_fh *fh = NULL;
+	cfs_ino_t *pinode = &ut_cfs_obj->current_inode;
+	struct cfs_fh *parent_fh = NULL;
+	struct cfs_fh *child_fh = NULL;
 
 	cfs_ino_t file_inode = 0LL;
-	cfs_ino_t file_inode2 = 0LL;
-	cfs_ino_t *file_inode3 = NULL;
+	cfs_ino_t *file_inode2 = NULL;
 
-	rc = cfs_creat(ut_cfs_obj->cfs_fs, &ut_cfs_obj->cred,
-		       &ut_cfs_obj->current_inode, ut_cfs_obj->file_name, 0755,
-		       &file_inode);
+	rc = cfs_fh_from_ino(ut_cfs_obj->cfs_fs, pinode, &parent_fh);
+	ut_assert_int_equal(rc, 0);
+
+	rc = cfs_creat(parent_fh, &ut_cfs_obj->cred, ut_cfs_obj->file_name,
+		       0755, &file_inode);
 
 	ut_assert_int_equal(rc, 0);
 
-	rc = cfs_lookup(ut_cfs_obj->cfs_fs, &ut_cfs_obj->cred,
-			&ut_cfs_obj->parent_inode, ut_cfs_obj->file_name,
-			&file_inode2);
-
-	ut_assert_int_equal(rc, 0);
-	ut_assert_int_equal(file_inode, file_inode2);
-
-	cfs_fh_from_ino(ut_cfs_obj->cfs_fs, &file_inode, &fh);
-	ut_assert_not_null(fh);
+	rc = cfs_fh_lookup(&ut_cfs_obj->cred, parent_fh, ut_cfs_obj->file_name,
+			   &child_fh);
 	ut_assert_int_equal(rc, 0);
 
-	file_inode3 = cfs_fh_ino(fh);
-	ut_assert_not_null(file_inode3);
-	ut_assert_int_equal(file_inode, *file_inode3);
+	file_inode2 = cfs_fh_ino(child_fh);
+	ut_assert_not_null(file_inode2);
+	ut_assert_int_equal(file_inode, *file_inode2);
 
-	if (fh) {
-		cfs_fh_destroy(fh);
-	}
+	cfs_fh_destroy(child_fh);
+	cfs_fh_destroy_and_dump_stat(parent_fh);
 }
 
 /**
@@ -189,20 +193,31 @@ static void create_longname255_file(void **state)
 {
 	int rc = 0;
 	struct ut_cfs_params *ut_cfs_obj = ENV_FROM_STATE(state);
+	cfs_ino_t *pinode = &ut_cfs_obj->current_inode;
+	struct cfs_fh *parent_fh = NULL;
+	struct cfs_fh *child_fh = NULL;
 
 	cfs_ino_t file_inode = 0LL;
+	cfs_ino_t *file_inode2 = NULL;
 
-	rc = cfs_creat(ut_cfs_obj->cfs_fs, &ut_cfs_obj->cred,
-			&ut_cfs_obj->current_inode, ut_cfs_obj->file_name, 0755,
-			&file_inode);
+	rc = cfs_fh_from_ino(ut_cfs_obj->cfs_fs, pinode, &parent_fh);
+	ut_assert_int_equal(rc, 0);
+
+	rc = cfs_creat(parent_fh, &ut_cfs_obj->cred, ut_cfs_obj->file_name,
+		       0755, &file_inode);
 
 	ut_assert_int_equal(rc, 0);
 
-	rc = cfs_lookup(ut_cfs_obj->cfs_fs, &ut_cfs_obj->cred,
-			&ut_cfs_obj->parent_inode, ut_cfs_obj->file_name,
-			&file_inode);
-
+	rc = cfs_fh_lookup(&ut_cfs_obj->cred, parent_fh, ut_cfs_obj->file_name,
+			   &child_fh);
 	ut_assert_int_equal(rc, 0);
+
+	file_inode2 = cfs_fh_ino(child_fh);
+	ut_assert_not_null(file_inode2);
+	ut_assert_int_equal(file_inode, *file_inode2);
+
+	cfs_fh_destroy(child_fh);
+	cfs_fh_destroy_and_dump_stat(parent_fh);
 }
 
 /**
@@ -216,35 +231,37 @@ static void create_longname255_file(void **state)
  * Expected behavior:
  *  1. No errors from CORTXFS API.
  *  2. First lookup should fail with error -ENOENT
- *  3. Second lookup should be successful 
+ *  3. Second lookup should be successful
  */
 static int create_exist_file_setup(void **state)
 {
 	int rc = 0;
 	struct ut_cfs_params *ut_cfs_obj = ENV_FROM_STATE(state);
+	cfs_ino_t *pinode = &ut_cfs_obj->parent_inode;
+	struct cfs_fh *parent_fh = NULL;
+	struct cfs_fh *child_fh = NULL;
 
 	char * file_name = "test_existing_file";
 	cfs_ino_t file_inode = 0LL;
 
 	ut_cfs_obj->file_name = file_name;
 
-	rc = cfs_lookup(ut_cfs_obj->cfs_fs, &ut_cfs_obj->cred,
-			&ut_cfs_obj->parent_inode, file_name, &file_inode);
+	rc = cfs_fh_from_ino(ut_cfs_obj->cfs_fs, pinode, &parent_fh);
+	ut_assert_int_equal(rc, 0);
 
+	rc = cfs_fh_lookup(&ut_cfs_obj->cred, parent_fh, file_name, &child_fh);
 	ut_assert_int_equal(rc, -ENOENT);
 
-	rc = 0;
-
-	rc = cfs_creat(ut_cfs_obj->cfs_fs, &ut_cfs_obj->cred,
-			&ut_cfs_obj->current_inode, file_name, 0755, &file_inode);
+	rc = cfs_creat(parent_fh, &ut_cfs_obj->cred, file_name, 0755,
+		       &file_inode);
 
 	ut_assert_int_equal(rc, 0);
 
-	rc = cfs_lookup(ut_cfs_obj->cfs_fs, &ut_cfs_obj->cred,
-			&ut_cfs_obj->parent_inode, file_name, &file_inode);
-
+	rc = cfs_fh_lookup(&ut_cfs_obj->cred, parent_fh, file_name, &child_fh);
 	ut_assert_int_equal(rc, 0);
 
+	cfs_fh_destroy(child_fh);
+	cfs_fh_destroy_and_dump_stat(parent_fh);
 	return rc;
 }
 
@@ -260,15 +277,20 @@ static int create_exist_file_setup(void **state)
 static void create_exist_file(void **state)
 {
 	int rc = 0;
-	struct ut_cfs_params *ut_cfs_obj = ENV_FROM_STATE(state);	
+	struct ut_cfs_params *ut_cfs_obj = ENV_FROM_STATE(state);
+	cfs_ino_t *pinode = &ut_cfs_obj->current_inode;
+	struct cfs_fh *parent_fh = NULL;
 
 	cfs_ino_t file_inode = 0LL;
 
-	rc = cfs_creat(ut_cfs_obj->cfs_fs, &ut_cfs_obj->cred,
-			&ut_cfs_obj->current_inode, ut_cfs_obj->file_name, 0755,
-			&file_inode);
+	rc = cfs_fh_from_ino(ut_cfs_obj->cfs_fs, pinode, &parent_fh);
+	ut_assert_int_equal(rc, 0);
+
+	rc = cfs_creat(parent_fh, &ut_cfs_obj->cred, ut_cfs_obj->file_name,
+		       0755, &file_inode);
 
 	ut_assert_int_equal(rc, -EEXIST);
+	cfs_fh_destroy_and_dump_stat(parent_fh);
 }
 
 /**
