@@ -266,20 +266,32 @@ static inline int __cfs_readdir(struct cfs_fs *cfs_fs,
 {
 	int rc;
 	struct cfs_readdir_ctx cb_info = { .cb = cb, .ctx = cb_ctx};
-	struct kvnode node = KVNODE_INIT_EMTPY;
+	struct cfs_fh *fh = NULL;
+	struct stat *stat = NULL;
+	node_id_t *node_id = NULL;
 
-	RC_WRAP_LABEL(rc, out, cfs_access, cfs_fs, (cfs_cred_t *)cred,
-                      (cfs_ino_t *)dir_ino, CFS_ACCESS_LIST_DIR);
+	/* TODO:Temp_FH_op - to be removed
+	 * Should get rid of creating and destroying FH operation in this
+	 * API when caller pass the valid FH instead of inode number
+	 */
+	RC_WRAP_LABEL(rc, out, cfs_fh_from_ino, cfs_fs, dir_ino, &fh);
+	node_id = cfs_node_id_from_fh(fh);
+	stat = cfs_fh_stat(fh);
 
-	RC_WRAP_LABEL(rc, out, cfs_kvnode_load, &node, cfs_fs->kvtree, dir_ino);
+	RC_WRAP_LABEL(rc, out, cfs_access_check, cred, stat,
+		      CFS_ACCESS_LIST_DIR);
 
 	RC_WRAP_LABEL(rc, out, kvtree_iter_children, cfs_fs->kvtree,
-		      &node.node_id, cfs_readdir_cb, &cb_info);
+		      node_id, cfs_readdir_cb, &cb_info);
 
-	RC_WRAP_LABEL(rc, out, cfs_update_stat, &node, STAT_ATIME_SET);
+	RC_WRAP_LABEL(rc, out, cfs_amend_stat, stat, STAT_ATIME_SET);
 
 out:
-	kvnode_fini(&node);
+	if (fh != NULL ) {
+		cfs_fh_destroy_and_dump_stat(fh);
+	}
+
+	log_debug("cfs_fs=%p dir_ino=%llu rc=%d", cfs_fs, *dir_ino, rc);
 	return rc;
 }
 
@@ -391,21 +403,29 @@ int cfs_readlink(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_ino_t *lnk,
 		 char *content, size_t *size)
 {
 	int rc;
-	struct kvnode node = KVNODE_INIT_EMTPY;
 	struct kvstore *kvstor = kvstore_get();
+	struct kvnode *node = NULL;
+	struct cfs_fh *fh = NULL;
+	struct stat *stat = NULL;
 	buff_t value;
 
-	log_trace("ENTER: symlink_ino=%llu", *lnk);
-	dassert(cred && lnk && size);
+	dassert(cfs_fs && cred && lnk && size && content);
 	dassert(*size != 0);
 
 	buff_init(&value, NULL, 0);
 
-	RC_WRAP_LABEL(rc, errfree, cfs_kvnode_load, &node, cfs_fs->kvtree, lnk);
-	RC_WRAP_LABEL(rc, errfree, cfs_update_stat, &node, STAT_ATIME_SET);
+	/* TODO:Temp_FH_op - to be removed
+	 * Should get rid of creating and destroying FH operation in this
+	 * API when caller pass the valid FH instead of inode number
+	 */
+	RC_WRAP_LABEL(rc, errfree, cfs_fh_from_ino, cfs_fs, lnk, &fh);
+	stat = cfs_fh_stat(fh);
+	node = cfs_kvnode_from_fh(fh);
+
+	RC_WRAP_LABEL(rc, errfree, cfs_amend_stat, stat, STAT_ATIME_SET);
 
 	/* Get symlink attributes */
-	RC_WRAP_LABEL(rc, errfree, cfs_get_sysattr, &node, &value,
+	RC_WRAP_LABEL(rc, errfree, cfs_get_sysattr, node, &value,
 		      CFS_SYS_ATTR_SYMLINK);
 
 	dassert(value.len <= PATH_MAX);
@@ -421,15 +441,18 @@ int cfs_readlink(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_ino_t *lnk,
 	log_debug("Got link: content='%.*s'", (int) *size, content);
 
 errfree:
-	kvnode_fini(&node);
+	if (fh != NULL) {
+		cfs_fh_destroy_and_dump_stat(fh);
+	}
 
 	if (value.buf) {
 		kvs_free(kvstor, value.buf);
 	}
 
-	log_trace("cfs_readlink: rc=%d", rc);
+	log_trace("cfs_fs=%p: ino=%llu rc=%d", cfs_fs, *lnk, rc);
 	return rc;
 }
+
 /** Default mode for a symlink object.
  * Here is a quote from `man 7 symlink`:
  *        On Linux, the permissions of a symbolic link are not used in any
@@ -471,55 +494,78 @@ out:
 	return rc;
 }
 
-
 int cfs_link(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_ino_t *ino,
 	     cfs_ino_t *dino, char *dname)
 {
 	int rc;
-	cfs_ino_t tmpino = 0LL;
 	str256_t k_name;
 	struct kvstore *kvstor = kvstore_get();
 	struct kvs_idx index;
-	struct kvnode node = KVNODE_INIT_EMTPY;
-	struct kvnode pnode = KVNODE_INIT_EMTPY;
+	struct cfs_fh *parent_fh = NULL;
+	struct cfs_fh *child_fh = NULL;
+	struct stat *parent_stat = NULL;
+	struct  stat *child_stat = NULL;
+	node_id_t *dnode_id = NULL;
+	node_id_t new_node_id;
 
 	dassert(cred && ino && dname && dino && kvstor);
 
 	index = cfs_fs->kvtree->index;
 
-	log_trace("ENTER: ino=%llu dino=%llu dname=%s", *ino, *dino, dname);
 	RC_WRAP(kvs_begin_transaction, kvstor, &index);
-	RC_WRAP_LABEL(rc, aborted, cfs_access, cfs_fs, cred, dino, CFS_ACCESS_WRITE);
 
-	rc = cfs_lookup(cfs_fs, cred, dino, dname, &tmpino);
+	/* TODO:Temp_FH_op - to be removed
+	 * Should get rid of creating and destroying FH operation in this
+	 * API when caller pass the valid FH instead of inode number
+	 */
+	RC_WRAP_LABEL(rc, aborted, cfs_fh_from_ino, cfs_fs, dino, &parent_fh);
+	dnode_id = cfs_node_id_from_fh(parent_fh);
+	parent_stat = cfs_fh_stat(parent_fh);
+
+	RC_WRAP_LABEL(rc, aborted, cfs_access_check, cred, parent_stat,
+		      CFS_ACCESS_WRITE);
+
+	rc = cfs_fh_lookup(cred, parent_fh, dname, &child_fh);
 	if (rc == 0)
-		return -EEXIST;
+	{
+		rc = -EEXIST;
+		goto aborted;
+	}
 
 	str256_from_cstr(k_name, dname, strlen(dname));
-	node_id_t dnode_id, new_node_id;
 
-	ino_to_node_id(dino, &dnode_id);
 	ino_to_node_id(ino, &new_node_id);
 
-	RC_WRAP_LABEL(rc, aborted, kvtree_attach, cfs_fs->kvtree, &dnode_id,
+	RC_WRAP_LABEL(rc, aborted, kvtree_attach, cfs_fs->kvtree, dnode_id,
 		      &new_node_id, &k_name);
 
-	RC_WRAP_LABEL(rc, aborted, cfs_kvnode_load, &node, cfs_fs->kvtree, ino);
-	RC_WRAP_LABEL(rc, aborted, cfs_update_stat, &node,
+	RC_WRAP_LABEL(rc, aborted, cfs_fh_from_ino, cfs_fs, ino, &child_fh);
+	child_stat = cfs_fh_stat(child_fh);
+
+	RC_WRAP_LABEL(rc, aborted, cfs_amend_stat, child_stat,
 		      STAT_CTIME_SET|STAT_INCR_LINK);
 
-	RC_WRAP_LABEL(rc, aborted, cfs_kvnode_load, &pnode, cfs_fs->kvtree, dino);
-	RC_WRAP_LABEL(rc, aborted, cfs_update_stat, &pnode,
+	RC_WRAP_LABEL(rc, aborted, cfs_amend_stat, parent_stat,
 		      STAT_MTIME_SET|STAT_CTIME_SET);
 
 	RC_WRAP(kvs_end_transaction, kvstor, &index);
+
 aborted:
-	kvnode_fini(&pnode);
-	kvnode_fini(&node);
+	if (parent_fh != NULL) {
+		cfs_fh_destroy_and_dump_stat(parent_fh);
+	}
+
+	if (child_fh != NULL ) {
+		cfs_fh_destroy_and_dump_stat(child_fh);
+	}
+
 	if (rc != 0) {
 		kvs_discard_transaction(kvstor, &index);
 	}
-	log_trace("EXIT: rc=%d ino=%llu dino=%llu dname=%s", rc, *ino, *dino, dname);
+
+	log_trace("cfs_fs=%p rc=%d ino=%llu dino=%llu dname=%s", cfs_fs, rc,
+		  *ino, *dino, dname);
+
 	return rc;
 }
 

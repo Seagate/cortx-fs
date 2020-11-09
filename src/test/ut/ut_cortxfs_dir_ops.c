@@ -984,23 +984,26 @@ static void link_unlink_file(void **state)
 	struct ut_cfs_params *ut_cfs_obj = ENV_FROM_STATE(state);
 	cfs_ino_t *pinode = &ut_cfs_obj->file_inode;;
 	cfs_ino_t cinode;
+	struct cfs_fh *parent_fh = NULL;
+	struct cfs_fh *child_fh = NULL;
+	struct stat *parent_stat = NULL;
 	struct stat before_link;
 	struct stat after_link;
 	struct stat after_unlink;
 
-	memset(&before_link, 0, sizeof(before_link));
-	rc = cfs_getattr(ut_cfs_obj->cfs_fs, &ut_cfs_obj->cred,
-			 pinode, &before_link);
+	rc = cfs_fh_from_ino(ut_cfs_obj->cfs_fs, pinode, &parent_fh);
 	ut_assert_int_equal(rc, 0);
+	parent_stat = cfs_fh_stat(parent_fh);
 
-	rc = cfs_creat(ut_cfs_obj->cfs_fs, &ut_cfs_obj->cred,
-		       pinode, "file1", 0755, &cinode);
+	memset(&before_link, 0, sizeof(before_link));
+	memcpy(&before_link, parent_stat, sizeof(before_link));
+
+	rc = cfs_creat(parent_fh, &ut_cfs_obj->cred,
+		       "file1", 0755, &cinode);
 	ut_assert_int_equal(rc, 0);
 
 	memset(&after_link, 0, sizeof(after_link));
-	rc = cfs_getattr(ut_cfs_obj->cfs_fs, &ut_cfs_obj->cred,
-			 pinode, &after_link);
-	ut_assert_int_equal(rc, 0);
+	memcpy(&after_link, parent_stat, sizeof(after_link));
 
 	/* if ctime after link has not changed than assert */
 	if (after_link.st_ctim.tv_sec == before_link.st_ctim.tv_sec &&
@@ -1016,14 +1019,15 @@ static void link_unlink_file(void **state)
 		ut_assert_true(0);
 	}
 
-	rc = cfs_unlink(ut_cfs_obj->cfs_fs, &ut_cfs_obj->cred,
-			pinode, NULL, "file1");
+	rc = cfs_fh_from_ino(ut_cfs_obj->cfs_fs, &cinode, &child_fh);
+	ut_assert_int_equal(rc, 0);
+
+	rc = cfs_unlink2(parent_fh, child_fh, &ut_cfs_obj->cred,
+			 "file1");
 	ut_assert_int_equal(rc, 0);
 
 	memset(&after_unlink, 0, sizeof(after_unlink));
-	rc = cfs_getattr(ut_cfs_obj->cfs_fs, &ut_cfs_obj->cred,
-			 pinode, &after_unlink);
-	ut_assert_int_equal(rc, 0);
+	memcpy(&after_unlink, parent_stat, sizeof(after_unlink));
 
 	/* if ctime after unlink has not changed than assert */
 	if (after_link.st_ctim.tv_sec == after_unlink.st_ctim.tv_sec &&
@@ -1037,6 +1041,9 @@ static void link_unlink_file(void **state)
 
 		ut_assert_true(0);
 	}
+
+	cfs_fh_destroy_and_dump_stat(parent_fh);
+	cfs_fh_destroy(child_fh);
 }
 
 static int link_unlink_file_teardown(void **state)
