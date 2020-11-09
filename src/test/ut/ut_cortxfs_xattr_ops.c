@@ -407,7 +407,8 @@ int listxattr_test_setup(void **state)
 
 	struct ut_xattr_env *ut_xattr_obj = XATTR_ENV_FROM_STATE(state);
 	struct ut_cfs_params *ut_cfs_obj = &ut_xattr_obj->ut_cfs_obj;
-
+	struct cfs_fh *parent_fh = NULL;
+	cfs_ino_t *pinode = &ut_cfs_obj->current_inode;
 
 	ut_xattr_obj->xattr = malloc(sizeof(char *) * (xattr_set_cnt+1));
 	ut_xattr_obj->xattr[0] = malloc(sizeof(char) * (strnlen(file_name, XATTR_NAME_SIZE_MAX)+1));
@@ -418,8 +419,11 @@ int listxattr_test_setup(void **state)
 	}
 
 
-	rc = cfs_creat(ut_cfs_obj->cfs_fs, &ut_cfs_obj->cred,
-			&ut_cfs_obj->current_inode, file_name, 0755, &file_inode);
+	rc = cfs_fh_from_ino(ut_cfs_obj->cfs_fs, pinode, &parent_fh);
+	ut_assert_int_equal(rc, 0);
+
+	rc = cfs_creat(parent_fh, &ut_cfs_obj->cred, file_name, 0755,
+		       &file_inode);
 
 	ut_assert_int_equal(rc, 0);
 
@@ -433,6 +437,7 @@ int listxattr_test_setup(void **state)
 		ut_assert_int_equal(rc, 0);
 	}
 
+	cfs_fh_destroy_and_dump_stat(parent_fh);
 	return rc;
 }
 

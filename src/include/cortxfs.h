@@ -435,6 +435,22 @@ int cfs_rmdir(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_ino_t *parent,
  * Destroys the link between 'dir' and 'fino' and removes
  * the 'fino' object from the namespace if it has no links.
  *
+ * @param[in] parent_fh - A parent file handle
+ * @param[in] child_fh - A child file handle of an object to be removed.
+ * @param[in] cred - User's credentials.
+ * @param[in] name - Name of the entry to be removed.
+ * @return 0 if successfull, otherwise -errno.
+ *
+ * @see ::cfs_destroy_orphaned_file and ::cfs_detach.
+ */
+int cfs_unlink2(struct cfs_fh *parent_fh, struct cfs_fh *child_fh,
+                cfs_cred_t *cred, char *name);
+
+/**
+ * Removes a file or a symbolic link.
+ * Destroys the link between 'dir' and 'fino' and removes
+ * the 'fino' object from the namespace if it has no links.
+ *
  * @param[in] fs_ctx - A context associated with the filesystem.
  * @param[in] cred - User's credentials.
  * @param[in] dir - Inode of the parent directory.
@@ -467,16 +483,16 @@ int cfs_readlink(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_ino_t *link,
 /**
  * Creates a file.
  *
+ * @param parent_fh - A pointer to valid parent file handle
  * @param cred - pointer to user's credentials
- * @param parent - pointer to parent directory's inode.
  * @param name - name of the file to be created
  * @param mode - Unix mode for the new entry
  * @paran newino - [OUT] if successfuly, will point to newly created inode
  *
  * @return 0 if successful, a negative "-errno" value in case of failure
  */
-int cfs_creat(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_ino_t *parent,
-	      char *name, mode_t mode, cfs_ino_t *newfile);
+int cfs_creat(struct cfs_fh *parent_fh, cfs_cred_t *cred, char *name,
+              mode_t mode, cfs_ino_t *newfile);
 
 /* Atomic file creation.
  * The functions create a new file, sets new attributes, gets them back
