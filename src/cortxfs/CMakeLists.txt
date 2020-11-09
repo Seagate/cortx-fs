@@ -10,12 +10,6 @@ include_directories(${CORTXUTILSINC})
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CORTX_CFLAGS}")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CORTX_CFLAGS}")
 
-# Turns on ADDB-based TDSB wrappers.
-# When this flag is disabled, perfc TSDB code will be turned off.
-# When this flag is enabled, the utils module has to be
-# compiled with this flag enabled otherwise some of
-# the function calls will be undefined.
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DENABLE_TSDB_ADDB")
 
 SET(cortxfs_LIB_SRCS
    cortxfs.c
