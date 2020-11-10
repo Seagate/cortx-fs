@@ -18,6 +18,14 @@
  */
 
 #include "cortxfs_xattr_ops.h"
+#ifndef ENABLE_TSDB_ADDB
+#define ENABLE_TSDB_ADDB
+#endif
+#include <perf/perf-counters.h>
+#include <pthread.h>
+
+pthread_key_t perfc_tls_key;
+uint8_t perfc_tls_key_check = PERFC_INVALID_ID;
 
 /**
  * Setup for xattr test group.
@@ -77,6 +85,10 @@ int main(void)
 	int rc = 0;
 	char *test_log = "/var/log/cortx/test/ut/xattr_file_ops.log";
 
+	/*
+	 * uncomment below statement to enable addb traces in this UT
+	 * perfc_tsdb_setup();
+	 */
 	printf("Xattr file Tests\n");
 
 	rc = ut_init(test_log);
