@@ -159,22 +159,30 @@ static inline ssize_t __cfs_write(struct cfs_fs *cfs_fs, cfs_cred_t *cred,
 				  size_t count, off_t offset)
 {
 	int rc;
-	struct stat stat;
 	dstore_oid_t oid;
+	struct stat *stat = NULL;
+	struct cfs_fh *fh = NULL;
 	struct dstore *dstore = dstore_get();
-	struct kvnode node = KVNODE_INIT_EMTPY;
 	struct dstore_obj *obj = NULL;
 
+	dassert(cfs_fs && cred && fd && buf);
 	dassert(dstore);
-
-	RC_WRAP_LABEL(rc, out, cfs_ino_to_oid, cfs_fs, &fd->ino, &oid);
-
-	RC_WRAP(cfs_access, cfs_fs, cred, &fd->ino, CFS_ACCESS_WRITE);
 
 	if (count == 0) {
 		rc = 0;
 		goto out;
 	}
+
+	/* TODO:Temp_FH_op - to be removed
+	 * Should get rid of creating and destroying FH operation in this
+	 * API when caller pass the valid FH instead of inode number
+	 */
+	RC_WRAP_LABEL(rc, out, cfs_fh_from_ino, cfs_fs, &fd->ino, &fh);
+	stat = cfs_fh_stat(fh);
+
+	RC_WRAP_LABEL(rc, out, cfs_ino_to_oid, cfs_fs, &fd->ino, &oid);
+
+	RC_WRAP_LABEL(rc, out, cfs_access_check, cred, stat, CFS_ACCESS_WRITE);
 
 	ssize_t bs = dstore_get_bsize(dstore, &oid);
 	if (bs < 0) {
@@ -186,25 +194,26 @@ static inline ssize_t __cfs_write(struct cfs_fs *cfs_fs, cfs_cred_t *cred,
 	RC_WRAP_LABEL(rc, out, dstore_pwrite, obj, offset, count,
 		      bs, (char *)buf);
 
-	RC_WRAP(cfs_getattr, cfs_fs, cred, &fd->ino, &stat);
-	RC_WRAP_LABEL(rc, out, cfs_amend_stat, &stat, STAT_MTIME_SET| STAT_CTIME_SET);
+	RC_WRAP_LABEL(rc, out, cfs_amend_stat, stat,
+		      STAT_MTIME_SET|STAT_CTIME_SET);
 
-	if ((offset+count) > stat.st_size) {
-		stat.st_size = offset+count;
-		stat.st_blocks = (stat.st_size + DEV_BSIZE - 1) / DEV_BSIZE;
+	if ((offset + count) > stat->st_size) {
+		stat->st_size = offset + count;
+		stat->st_blocks = (stat->st_size + DEV_BSIZE - 1) / DEV_BSIZE;
 	}
-
-	RC_WRAP_LABEL(rc, out, cfs_kvnode_init, &node, cfs_fs->kvtree, &fd->ino,
-		      &stat);
-	RC_WRAP_LABEL(rc, out, cfs_set_stat, &node);
 	rc = count;
+
 out:
 	if (obj != NULL) {
 		dstore_obj_close(obj);
 	}
-	kvnode_fini(&node);
-	log_trace("cfs_write: ino=%llu fd=%p count=%lu offset=%ld rc=%d",
-		  fd->ino, fd, count, (long)offset, rc);
+
+	if (fh != NULL) {
+		cfs_fh_destroy_and_dump_stat(fh);
+	}
+
+	log_trace("cfs_fs=%p ino=%llu fd=%p count=%lu offset=%ld rc=%d",
+		  cfs_fs, fd->ino, fd, count, (long)offset, rc);
 	return rc;
 }
 
@@ -232,17 +241,22 @@ int cfs_truncate(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_ino_t *ino,
 	dstore_oid_t oid;
 	struct dstore *dstore = dstore_get();
 	struct dstore_obj *obj = NULL;
-	struct stat stat;
+	struct cfs_fh *fh = NULL;
+	struct stat *stat = NULL;
 	size_t old_size;
 	size_t new_size;
 
 	dassert(ino && new_stat && dstore);
 	dassert((new_stat_flags & STAT_SIZE_SET) != 0);
 
-	/* TODO:PERF: The caller can pass the current size */
-	RC_WRAP_LABEL(rc, out, cfs_getattr, cfs_fs, cred, ino, &stat);
+	/* TODO:Temp_FH_op - to be removed
+	 * Should get rid of creating and destroying FH operation in this
+	 * API when caller pass the valid FH instead of inode number
+	 */
+	RC_WRAP_LABEL(rc, out, cfs_fh_from_ino, cfs_fs, ino, &fh);
+	stat = cfs_fh_stat(fh);
 
-	old_size = stat.st_size;
+	old_size = stat->st_size;
 	new_size = new_stat->st_size;
 	new_stat->st_blocks = (new_size + DEV_BSIZE - 1) / DEV_BSIZE;
 
@@ -266,6 +280,11 @@ out:
 	if (obj != NULL) {
 		dstore_obj_close(obj);
 	}
+
+	if (fh != NULL) {
+		cfs_fh_destroy(fh);
+	}
+
 	return rc;
 }
 
@@ -274,17 +293,25 @@ static inline ssize_t __cfs_read(struct cfs_fs *cfs_fs, cfs_cred_t *cred,
 				 size_t count, off_t offset)
 {
 	int rc;
-	struct stat stat;
 	dstore_oid_t oid;
+	size_t  byte_to_read = count;
+	struct stat *stat = NULL;
+	struct cfs_fh *fh = NULL;
 	struct dstore *dstore = dstore_get();
-	struct kvnode node = KVNODE_INIT_EMTPY;
 	struct dstore_obj *obj = NULL;
 
+	dassert(cfs_fs && cred && fd && buf);
 	dassert(dstore);
 
+	/* TODO:Temp_FH_op - to be removed
+	 * Should get rid of creating and destroying FH operation in this
+	 * API when caller pass the valid FH instead of inode number
+	 */
+	RC_WRAP_LABEL(rc, out, cfs_fh_from_ino, cfs_fs, &fd->ino, &fh);
+	stat = cfs_fh_stat(fh);
+
 	RC_WRAP_LABEL(rc, out, cfs_ino_to_oid, cfs_fs, &fd->ino, &oid);
-	RC_WRAP(cfs_getattr, cfs_fs, cred, &fd->ino, &stat);
-	RC_WRAP(cfs_access, cfs_fs, cred, &fd->ino, CFS_ACCESS_READ);
+	RC_WRAP_LABEL(rc, out, cfs_access_check, cred, stat, CFS_ACCESS_READ);
 
 	/* Following are the cases which needs to be handled to ensure we are
 	 * not reading the data more than data written on file
@@ -298,12 +325,13 @@ static inline ssize_t __cfs_read(struct cfs_fs *cfs_fs, cfs_cred_t *cred,
 	 * read_bytes = available bytes.
 	 * 4. Read is within the written data so read the requested data.
 	 */
-	if (stat.st_size == 0 || stat.st_size <= offset || count == 0) {
+	if (stat->st_size == 0 || stat->st_size <= offset ||
+	    byte_to_read == 0) {
 		rc = 0;
 		goto out;
-	} else if (stat.st_size <= (offset + count)) {
+	} else if (stat->st_size <= (offset + byte_to_read)) {
 		/* Let's read only written bytes */
-		count = stat.st_size - offset;
+		byte_to_read = stat->st_size - offset;
 	}
 
 	ssize_t bs = dstore_get_bsize(dstore, &oid);
@@ -313,21 +341,22 @@ static inline ssize_t __cfs_read(struct cfs_fs *cfs_fs, cfs_cred_t *cred,
 	}
 
 	RC_WRAP_LABEL(rc, out, dstore_obj_open, dstore, &oid, &obj);
-	RC_WRAP_LABEL(rc, out, dstore_pread, obj, offset, count,
+	RC_WRAP_LABEL(rc, out, dstore_pread, obj, offset, byte_to_read,
 		      bs, (char *)buf);
 
-	RC_WRAP_LABEL(rc, out, cfs_amend_stat, &stat, STAT_ATIME_SET);
-	RC_WRAP_LABEL(rc, out, cfs_kvnode_init, &node, cfs_fs->kvtree, &fd->ino,
-		      &stat);
-	RC_WRAP_LABEL(rc, out, cfs_set_stat, &node);
-	rc = count;
+	RC_WRAP_LABEL(rc, out, cfs_amend_stat, stat, STAT_ATIME_SET);
+	rc = byte_to_read;
+
 out:
 	if (obj != NULL) {
 		dstore_obj_close(obj);
 	}
 
-	kvnode_fini(&node);
-	log_trace("cfs_read: ino=%llu fd=%p count=%lu offset=%ld rc=%d",
+	if (fh != NULL) {
+		cfs_fh_destroy_and_dump_stat(fh);
+	}
+
+	log_trace("cfs_fs=%p ino=%llu fd=%p count=%lu offset=%ld rc=%d", cfs_fs,
 		  fd->ino, fd, count, (long)offset, rc);
 	return rc;
 }

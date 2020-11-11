@@ -149,6 +149,9 @@ int cfs_fh_from_ino(struct cfs_fs *fs, const cfs_ino_t *ino_num,
 
 	dassert(kvstor && fs && ino_num && fh);
 
+	RC_WRAP_LABEL(rc, out, cfs_kvnode_load, &node, fs->kvtree,
+		      ino_num);
+
 	/* A caller for this API who uses/caches this FH, will be responsible
 	 * for freeing up this FH, caller should be calling cfs_fh_destroy to
 	 * release this FH
@@ -156,21 +159,14 @@ int cfs_fh_from_ino(struct cfs_fs *fs, const cfs_ino_t *ino_num,
 	RC_WRAP_LABEL(rc, out, kvs_alloc, kvstor, (void **) &newfh,
 		      sizeof(struct cfs_fh));
 
-	*newfh = CFS_FH_INIT;
-
-	RC_WRAP_LABEL(rc, out, cfs_kvnode_load, &node, fs->kvtree,
-		      ino_num);
-
 	newfh->f_node = node;
 	newfh->fs = fs;
 	cfs_fh_init_key(newfh);
 	dassert(cfs_fh_invariant(newfh));
 	*fh = newfh;
 	newfh = NULL;
+
 out:
-	if (unlikely(newfh)) {
-		cfs_fh_destroy(newfh);
-	}
 	return rc;
 }
 
