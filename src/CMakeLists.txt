@@ -28,7 +28,7 @@ set(DEFAULT_DSALINC "")
 set(DSALINC ${DEFAULT_DSALINC} CACHE PATH "Path to folder with dstore.h")
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -I\"${CMAKE_SOURCE_DIR}/include\"")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Werror -fPIC -g")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Werror -fPIC -g -lpthread")
 
 set(CORTXFS_BASE_VERSION ${BASE_VERSION})
 set(INSTALL_DIR_ROOT ${INSTALL_DIR_ROOT})
