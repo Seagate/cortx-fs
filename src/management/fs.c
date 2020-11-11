@@ -24,6 +24,7 @@
 #include <evhtp.h>
 #include <json/json.h> /* for json_object */
 #include <management.h>
+#include <md5hash.h>
 #include <common/log.h>
 #include <str.h>
 #include <debug.h>
@@ -42,6 +43,7 @@ struct fs_create_api_req {
 };
 
 struct fs_create_api_resp {
+	const char *fs_name;
 	/* ... */
 };
 
@@ -55,17 +57,59 @@ static int fs_create_send_response(struct controller_api *fs_create, void *args)
 	int rc = 0;
 	int resp_code = 0;
 	struct request *request = NULL;
+	struct json_object *json_obj = NULL;
+	struct json_object *json_fs_obj = NULL;
+	struct fs_create_api *fs_create_api = NULL;
+	struct md5hash hash = MD5HASH_INIT_EMPTY;
+	str256_t etag_str;
 
 	request = fs_create->request;
+
+	fs_create_api = (struct fs_create_api*)fs_create->priv;
 
 	rc = request_get_errcode(request);
 	if (rc != 0) {
 		resp_code = errno_to_http_code(rc);
 	} else {
-		/* Resource got created. */
-		resp_code = EVHTP_RES_CREATED;
+		/* 
+		 * Generic 200 OK code and response 
+		 * Object. 
+		 */
+		resp_code = EVHTP_RES_200;
+
+		rc = md5hash_compute(fs_create_api->resp.fs_name, 
+				     sizeof(fs_create_api->resp.fs_name), 
+				     &hash);
+		if (rc) {
+			resp_code = errno_to_http_code(rc);
+			request_set_errcode(request, rc);
+			goto out;
+ 		}
+
+		rc = md5hash_get_string(&hash, &etag_str);
+		if (rc) {
+			resp_code = errno_to_http_code(rc);
+			request_set_errcode(request, rc);
+			goto out;
+ 		}
+
+		request_set_reponse_etag_value(request, etag_str);
+		
+		/* Create json object */
+		json_fs_obj = json_object_new_object();
+
+		if (fs_create_api->resp.fs_name != NULL)
+		{
+			json_obj = json_object_new_string(fs_create_api->resp.fs_name);
+			json_object_object_add(json_fs_obj,
+					       "fs-name",
+					       json_obj);
+		}
+
+		request_set_data(request, json_fs_obj);
 	}
 
+out :
 	log_debug("err_code : %d", resp_code);
 
 	request_send_response(request, resp_code);
@@ -163,6 +207,8 @@ static int fs_create_process_data(struct controller_api *fs_create)
 	request_set_errcode(request, -rc);
 	log_debug("FS create status code : %d.", rc);
 
+	fs_create_api->resp.fs_name = fs_create_api->req.fs_name;
+
 	request_next_action(fs_create);
 
 error:
@@ -190,6 +236,17 @@ static int fs_create_process_request(struct controller_api *fs_create,
 	if (request_content_length(request) == 0) {
 		/**
 		 * Expecting create request fs info.
+		 */
+		rc = EINVAL;
+		request_set_errcode(request, rc);
+		fs_create_send_response(fs_create, NULL);
+		goto error;
+	}
+
+	if (request_etag_value(request) != NULL) {
+		/**
+		 *  For the moment we do not support
+		 * modification of filesystem
 		 */
 		rc = EINVAL;
 		request_set_errcode(request, rc);
