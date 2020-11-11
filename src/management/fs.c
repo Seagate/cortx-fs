@@ -30,6 +30,7 @@
 #include <debug.h>
 #include "internal/controller.h"
 #include "internal/fs.h"
+#include "internal/error_handler.h"
 
 /**
  * ##############################################################
@@ -70,6 +71,10 @@ static int fs_create_send_response(struct controller_api *fs_create, void *args)
 	rc = request_get_errcode(request);
 	if (rc != 0) {
 		resp_code = errno_to_http_code(rc);
+
+		const char *msg = fs_create_errno_to_respmsg(rc);
+		rc = request_set_err_resp(request, msg);
+
 	} else {
 		/* 
 		 * Generic 200 OK code and response 
