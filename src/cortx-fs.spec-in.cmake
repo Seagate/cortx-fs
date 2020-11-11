@@ -18,6 +18,9 @@ Provides: %{name} = %{version}-%{release}
 @BCOND_ENABLE_DASSERT@ enable_dassert
 %global enable_dassert %{on_off_switch enable_dassert}
 
+@BCOND_ENABLE_TSDB_ADDB@ enable_tsdb_addb
+%global enable_tsdb_addb%{on_off_switch enable_tsdb_addb}
+
 # CORTX NSAL library paths
 %define	_cortxfs_lib		@PROJECT_NAME@
 %define _cortxfs_dir		@INSTALL_DIR_ROOT@/@PROJECT_NAME_BASE@/fs
@@ -51,6 +54,7 @@ cmake . -DCORTXUTILSINC:PATH="@CORTXUTILSINC@"         \
 	-DDSALINC:PATH="@DSALINC@"		 \
 	-DLIBDSAL:PATH="@LIBDSAL@"		\
 	-DENABLE_DASSERT=%{enable_dassert}	\
+	-DENABLE_TSDB_ADDB=%{enable_tsdb_addb}	\
 	-DPROJECT_NAME_BASE=@PROJECT_NAME_BASE@
 
 make %{?_smp_mflags} || make %{?_smp_mflags} || make
