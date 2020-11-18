@@ -31,7 +31,10 @@
 #include "internal/controller.h"
 #include "internal/fs.h"
 #include "internal/error_handler.h"
+#include <limits.h>
 
+#define HASH_MAX_LEN		32
+#define FS_NAME_MAX_LEN		NAME_MAX
 /**
  * ##############################################################
  * #		FS CREATE API'S					#
@@ -83,7 +86,8 @@ static int fs_create_send_response(struct controller_api *fs_create, void *args)
 		resp_code = EVHTP_RES_200;
 
 		rc = md5hash_compute(fs_create_api->resp.fs_name, 
-				     sizeof(fs_create_api->resp.fs_name), 
+				     strnlen(fs_create_api->resp.fs_name, 
+					     FS_NAME_MAX_LEN), 
 				     &hash);
 		if (rc) {
 			resp_code = errno_to_http_code(rc);
@@ -378,6 +382,10 @@ static int fs_delete_process_request(struct controller_api *fs_delete,
 	int fs_name_len = 0;
 	struct request *request = NULL;
 	struct fs_delete_api *fs_delete_api = NULL;
+	const char *fs_name_hash = NULL;
+	struct md5hash hash = MD5HASH_INIT_EMPTY;
+	str256_t hash_str;
+	str256_t request_hash_str;
 
 	request = fs_delete->request;
 
@@ -390,6 +398,8 @@ static int fs_delete_process_request(struct controller_api *fs_delete,
 		fs_delete_send_response(fs_delete, NULL);
 		goto error;
 	}
+
+	fs_name_hash = request_etag_value(request);
 
 	if (request_content_length(request) != 0) {
 		/**
@@ -429,6 +439,53 @@ static int fs_delete_process_request(struct controller_api *fs_delete,
 			 fs_name_len);
 
 	log_debug("Deleting FS : %s.", fs_delete_api->req.fs_name);
+
+	if (fs_name_hash == NULL) {	
+		log_err("Object hash not sent");
+		rc = EINVAL;
+		request_set_errcode(request, rc);
+		fs_create_send_response(fs_delete, NULL);
+		goto error;
+	}
+
+	/* If we ever become multi-threaded, then this might not be sufficient.
+	 * Suppose we recieve 2 simultaneous request then the response to
+	 * one request should be success and the response to another request
+	 * should be "Not Found". In order to achieve this we would need a 
+	 * locking mechanism before we perform this operation. If underlying
+	 * filesystem object has its own locking mechanisms and they can ensure
+	 * that the delete operation can be performed atomically then this
+	 * won't be an issue. */
+	rc = md5hash_compute(fs_delete_api->req.fs_name, 
+			     fs_name_len, 
+			     &hash);
+	if (rc) {
+		log_err("Error Computing hash, rc = %d, fs_name = %s",
+			rc, fs_delete_api->req.fs_name);
+		request_set_errcode(request, rc);
+		fs_create_send_response(fs_delete, NULL);
+		goto error;
+	}
+
+	rc = md5hash_get_string(&hash, &hash_str);
+	if (rc) {
+		log_err("Error getting hash as a string.");
+		request_set_errcode(request, rc);
+		fs_create_send_response(fs_delete, NULL);
+		goto error;
+	}
+
+	str256_from_cstr(request_hash_str, 
+			 fs_name_hash, 
+			 strnlen(fs_name_hash, HASH_MAX_LEN));
+
+	rc = md5hash_validate(&hash_str, &request_hash_str);
+	if (rc) {
+		log_err("Hash does not match");
+		request_set_errcode(request, rc);
+		fs_create_send_response(fs_delete, NULL);
+		goto error;
+	}
 
 	/**
 	 * Send fs delete request to the backend.
