@@ -22,8 +22,24 @@
 
 const char *error_resp_messages[] = {
 	"Invalid error response ID",
+
+	/* fs create api error response */
 	"The filesystem name specified is not valid.",
 	"The filesystem name you tried to create already exists.",
+
+	/* fs delete api error response */
+	"The specified filesystem does not exist.",
+	"The filesystem you tried to delete is being exported.",
+	"The filesystem you tried to delete is not empty.",
+
+	/* Generic error responses */
+	"The ETag should not be passed for a resource which is not modifiable.",
+	"The HASH specified did not match what we received.",
+	"The Object ETag is not sent.",
+	"Invalid payload data passed.",
+	"Invalid parameters passed with the API path.",
+
+	/* Default error response */
 	"Generic error message. Check cortx logs for more information."
 };
 
@@ -38,6 +54,13 @@ const char* fs_create_errno_to_respmsg(int err_code)
 	case EEXIST:
 		resp_id = ERR_RES_FS_EXIST;
 		break;
+	/* Since filesystem name cannot be modified. */
+	case INVALID_ETAG:
+		resp_id = ERR_RES_INVALID_ETAG;
+		break;
+	case INVALID_PAYLOAD:
+		resp_id = ERR_RES_INVALID_PAYLOAD;
+		break;
 	default:
 		resp_id = ERR_RES_DEFAULT;
 	}
@@ -45,3 +68,35 @@ const char* fs_create_errno_to_respmsg(int err_code)
 	return error_resp_messages[resp_id];
 }
 
+const char* fs_delete_errno_to_respmsg(int err_code)
+{
+	enum error_resp_id resp_id;
+
+	switch (err_code) {
+	case ENOENT:
+		resp_id = ERR_RES_FS_NONEXIST;
+		break;
+	case EINVAL:
+		resp_id = ERR_RES_FS_EXPORT_EXIST;
+		break;
+	case ENOTEMPTY:
+		resp_id = ERR_RES_FS_NOT_EMPTY;
+		break;
+	case BAD_DIGEST:
+		resp_id = ERR_RES_BAD_DIGEST;
+		break;
+	case MISSING_ETAG:
+		resp_id = ERR_RES_MISSING_ETAG;
+		break;
+	case INVALID_PAYLOAD:
+		resp_id = ERR_RES_INVALID_PAYLOAD;
+		break;
+	case INVALID_PATH_PARAMS:
+		resp_id = ERR_RES_INVALID_PATH_PARAMS;
+		break;
+	default:
+		resp_id = ERR_RES_DEFAULT;
+	}
+
+	return error_resp_messages[resp_id];
+}
