@@ -184,21 +184,16 @@ static inline ssize_t __cfs_write(struct cfs_fs *cfs_fs, cfs_cred_t *cred,
 
 	RC_WRAP_LABEL(rc, out, cfs_access_check, cred, stat, CFS_ACCESS_WRITE);
 
-	ssize_t bs = dstore_get_bsize(dstore, &oid);
-	if (bs < 0) {
-		rc = bs;
-		goto out;
-	}
-
 	RC_WRAP_LABEL(rc, out, dstore_obj_open, dstore, &oid, &obj);
 	RC_WRAP_LABEL(rc, out, dstore_pwrite, obj, offset, count,
-		      bs, (char *)buf);
+		      stat->st_blksize, (char *)buf);
 
 	RC_WRAP_LABEL(rc, out, cfs_amend_stat, stat,
 		      STAT_MTIME_SET|STAT_CTIME_SET);
 
 	if ((offset + count) > stat->st_size) {
 		stat->st_size = offset + count;
+		/*  TODO: Check if DEV_BSIZE should be stat->st_blksize */
 		stat->st_blocks = (stat->st_size + DEV_BSIZE - 1) / DEV_BSIZE;
 	}
 	rc = count;
@@ -258,6 +253,7 @@ int cfs_truncate(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_ino_t *ino,
 
 	old_size = stat->st_size;
 	new_size = new_stat->st_size;
+	/*  TODO: Check if DEV_BSIZE should be stat->st_blksize */
 	new_stat->st_blocks = (new_size + DEV_BSIZE - 1) / DEV_BSIZE;
 
 	/* If the caller wants to set mtime explicitly then
@@ -275,7 +271,8 @@ int cfs_truncate(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_ino_t *ino,
 
 	RC_WRAP_LABEL(rc, out, cfs_ino_to_oid, cfs_fs, ino, &oid);
 	RC_WRAP_LABEL(rc, out, dstore_obj_open, dstore, &oid, &obj);
-	RC_WRAP_LABEL(rc, out, dstore_obj_resize, obj, old_size, new_size);
+	RC_WRAP_LABEL(rc, out, dstore_obj_resize, obj, old_size, new_size,
+		      stat->st_blksize);
 out:
 	if (obj != NULL) {
 		dstore_obj_close(obj);
@@ -334,15 +331,9 @@ static inline ssize_t __cfs_read(struct cfs_fs *cfs_fs, cfs_cred_t *cred,
 		byte_to_read = stat->st_size - offset;
 	}
 
-	ssize_t bs = dstore_get_bsize(dstore, &oid);
-	if (bs < 0) {
-		rc = bs;
-		goto out;
-	}
-
 	RC_WRAP_LABEL(rc, out, dstore_obj_open, dstore, &oid, &obj);
 	RC_WRAP_LABEL(rc, out, dstore_pread, obj, offset, byte_to_read,
-		      bs, (char *)buf);
+		      stat->st_blksize, (char *)buf);
 
 	RC_WRAP_LABEL(rc, out, cfs_amend_stat, stat, STAT_ATIME_SET);
 	rc = byte_to_read;

@@ -630,6 +630,8 @@ int cfs_create_entry(struct cfs_fh *parent_fh, cfs_cred_t *cred, char *name,
 	bufstat.st_ctim.tv_sec = bufstat.st_atim.tv_sec;
 	bufstat.st_ctim.tv_nsec = bufstat.st_atim.tv_nsec;
 
+	bufstat.st_blksize = parent_stat->st_blksize;
+
 	switch (type) {
 	case CFS_FT_DIR:
 		bufstat.st_mode = S_IFDIR | mode;

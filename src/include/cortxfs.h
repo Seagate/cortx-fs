@@ -107,6 +107,12 @@ int cfs_endpoint_scan(int (*cfs_scan_cb)(const struct cfs_endpoint_info *info,
 #define CFS_DEFAULT_CONFIG "/etc/cortx/cortxfs.conf"
 
 #define CFS_ROOT_INODE 2LL
+/*
+ * We support block sizes from 2^12 (4K) t0 2^20 (1M).
+ */
+#define CFS_MIN_BLOCKSIZE 4096
+#define CFS_DEFAULT_BLOCKSIZE CFS_MIN_BLOCKSIZE
+#define CFS_MAX_BLOCKSIZE 1048576
 #define CFS_ROOT_UID 0
 
 typedef unsigned long long int cfs_ino_t;
@@ -189,6 +195,20 @@ typedef void *cfs_fs_ctx_t;
  * All below APIs need to be moved to internal headers
  * once all migration of cortxfs completes.
  */
+
+/*  cfs block size validator, returns 0 if valid */
+static inline int cfs_is_bsize_valid(size_t fs_bsize)
+{
+	int bsizes;
+	for (bsizes = CFS_MIN_BLOCKSIZE; bsizes <= CFS_MAX_BLOCKSIZE;
+	     bsizes <<= 1) {
+		if (bsizes == fs_bsize) {
+			return 0;
+		}
+	}
+	return -1;
+}
+
 /* Inode Attributes API */
 int cfs_amend_stat(struct stat *stat, int flags);
 
