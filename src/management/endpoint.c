@@ -29,6 +29,9 @@
 #include <debug.h>
 #include "internal/controller.h"
 #include "internal/fs.h"
+#include <limits.h> /* PATH_MAX */
+
+#define FILESYSTEM_ID_PREFIX "192."
 
 /**
  * ##############################################################
@@ -88,7 +91,7 @@ static int endpoint_create_process_data(struct controller_api *endpoint_create)
 	struct json_object *json_resp_obj = NULL;
         uint16_t fs_id = 0;
         struct cfs_fs *fs = NULL;
-        char str[256];
+        char str[NAME_MAX];
 
 	request = endpoint_create->request;
 
@@ -173,7 +176,7 @@ static int endpoint_create_process_data(struct controller_api *endpoint_create)
         /* get filesyetm ID */
         cfs_fs_get_id(fs, &fs_id);
 
-        snprintf(str, sizeof(str), "192.%d", fs_id);
+        snprintf(str, sizeof(str), FILESYSTEM_ID_PREFIX"%d", fs_id);
 
         json_resp_obj = json_object_new_string(str);
         json_object_object_add(json_endpoint_options_obj,
