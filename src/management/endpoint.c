@@ -29,7 +29,7 @@
 #include <debug.h>
 #include "internal/controller.h"
 #include "internal/fs.h"
-#include <limits.h> /* PATH_MAX */
+#include <limits.h> /* NAME_MAX */
 
 #define FILESYSTEM_ID_PREFIX "192."
 
