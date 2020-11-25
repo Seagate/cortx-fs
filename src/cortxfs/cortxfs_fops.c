@@ -108,10 +108,9 @@ int cfs_creat_ex(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_ino_t *parent,
 
 	RC_WRAP_LABEL(rc, out, cfs_creat, parent_fh, cred, name, mode,
 		      &object);
-	RC_WRAP_LABEL(rc, cleanup, cfs_setattr, cfs_fs, cred, &object, stat_in,
+	RC_WRAP_LABEL(rc, cleanup, cfs_setattr, parent_fh, cred, stat_in,
 		      stat_in_flags);
-	RC_WRAP_LABEL(rc, cleanup, cfs_getattr, cfs_fs, cred, &object,
-		      stat_out);
+	stat_out = cfs_fh_stat(parent_fh);
 
 	RC_WRAP(kvs_end_transaction, kvstor, &index);
 
@@ -266,8 +265,8 @@ int cfs_truncate(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_ino_t *ino,
 		new_stat_flags |= (STAT_MTIME_SET | STAT_CTIME_SET);
 	}
 
-	RC_WRAP_LABEL(rc, out, cfs_setattr, cfs_fs, cred, ino, new_stat,
-		      new_stat_flags);
+	RC_WRAP_LABEL(rc, out, cfs_setattr, fh, cred, new_stat,
+			new_stat_flags);
 
 	RC_WRAP_LABEL(rc, out, cfs_ino_to_oid, cfs_fs, ino, &oid);
 	RC_WRAP_LABEL(rc, out, dstore_obj_open, dstore, &oid, &obj);

@@ -331,7 +331,7 @@ int cfs_getattr(struct cfs_fs *cfs_fs, const cfs_cred_t *cred,
  *
  * @return 0 if successful, a negative "-errno" value in case of failure
  */
-int cfs_setattr(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_ino_t *ino,
+int cfs_setattr(struct cfs_fh *fh, cfs_cred_t *cred,
 		struct stat *setstat, int statflag);
 /**
  * Check is a given user can access an inode.

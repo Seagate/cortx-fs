@@ -871,34 +871,33 @@ static void create_remove_subdir(void **state)
 	struct ut_cfs_params *ut_cfs_obj = ENV_FROM_STATE(state);
 	cfs_ino_t *pinode =  &ut_cfs_obj->file_inode;
 	cfs_ino_t cinode;
-	struct stat before_create;
-	struct stat after_create;
-	struct stat after_rmdir;
+	struct cfs_fh *parent_fh = NULL;
+	struct stat *before_create = NULL;
+	struct stat *after_create = NULL;
+	struct stat *after_rmdir = NULL;
 
-	memset(&before_create, 0, sizeof(before_create));
-	rc = cfs_getattr(ut_cfs_obj->cfs_fs, &ut_cfs_obj->cred,
-			 pinode, &before_create);
+	rc = cfs_fh_from_ino(ut_cfs_obj->cfs_fs, pinode, &parent_fh);
 	ut_assert_int_equal(rc, 0);
+	before_create = cfs_fh_stat(parent_fh);
 
 	rc = cfs_mkdir(ut_cfs_obj->cfs_fs, &ut_cfs_obj->cred,
 		       pinode, "childdir", 0755, &cinode);
 	ut_assert_int_equal(rc, 0);
 
-	memset(&after_create, 0, sizeof(after_create));
-	rc = cfs_getattr(ut_cfs_obj->cfs_fs, &ut_cfs_obj->cred,
-			 pinode, &after_create);
+	rc = cfs_fh_from_ino(ut_cfs_obj->cfs_fs, pinode, &parent_fh);
 	ut_assert_int_equal(rc, 0);
+	after_create = cfs_fh_stat(parent_fh);
 
 	/* if ctime after create has not changed than assert */
-	if (after_create.st_ctim.tv_sec == before_create.st_ctim.tv_sec &&
-	    after_create.st_ctim.tv_nsec == before_create.st_ctim.tv_nsec) {
+	if (after_create->st_ctim.tv_sec == before_create->st_ctim.tv_sec &&
+	    after_create->st_ctim.tv_nsec == before_create->st_ctim.tv_nsec) {
 
 		ut_assert_true(0);
 	}
 
 	/* if mtime after create has not changed than assert */
-	if (after_create.st_mtim.tv_sec == before_create.st_mtim.tv_sec &&
-	    after_create.st_mtim.tv_nsec == before_create.st_mtim.tv_nsec) {
+	if (after_create->st_mtim.tv_sec == before_create->st_mtim.tv_sec &&
+	    after_create->st_mtim.tv_nsec == before_create->st_mtim.tv_nsec) {
 
 		ut_assert_true(0);
 	}
@@ -907,20 +906,19 @@ static void create_remove_subdir(void **state)
 		       pinode, "childdir");
 	ut_assert_int_equal(rc, 0);
 
-	memset(&after_rmdir, 0, sizeof(after_rmdir));
-	rc = cfs_getattr(ut_cfs_obj->cfs_fs, &ut_cfs_obj->cred,
-			 pinode, &after_rmdir);
+	rc = cfs_fh_from_ino(ut_cfs_obj->cfs_fs, pinode, &parent_fh);
 	ut_assert_int_equal(rc, 0);
+	after_rmdir = cfs_fh_stat(parent_fh);
 
 	/* if ctime after rmdir has not changed than assert */
-	if (after_rmdir.st_ctim.tv_sec == after_create.st_ctim.tv_sec &&
-	    after_rmdir.st_ctim.tv_nsec == after_create.st_ctim.tv_nsec) {
+	if (after_rmdir->st_ctim.tv_sec == after_create->st_ctim.tv_sec &&
+	    after_rmdir->st_ctim.tv_nsec == after_create->st_ctim.tv_nsec) {
 
 		ut_assert_true(0);
 	}
 	/* if mtime after rmdir has not changed than assert */
-	if (after_rmdir.st_mtim.tv_sec == after_create.st_mtim.tv_sec &&
-	    after_rmdir.st_mtim.tv_nsec == after_create.st_mtim.tv_nsec) {
+	if (after_rmdir->st_mtim.tv_sec == after_create->st_mtim.tv_sec &&
+	    after_rmdir->st_mtim.tv_nsec == after_create->st_mtim.tv_nsec) {
 
 		ut_assert_true(0);
 	}
