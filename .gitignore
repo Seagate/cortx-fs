@@ -1,2 +1,3 @@
-*cortxfs.spec
-*cortxfs.pc
+*.spec
+*.pc
+*.out

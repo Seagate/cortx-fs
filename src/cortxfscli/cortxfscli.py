@@ -71,7 +71,8 @@ cortxfscli_default_validation_rules = """{
 			"Squash" : {"set" : "no_root_squash,root_squash"},
 			"access_type" : {"set" : "RW,R,W,None"},
 			"protocols" : {"set" : "3,4,4.1,3:4"},
-			"pnfs_enabled" : {"set" : "true,false"}
+			"pnfs_enabled" : {"set" : "true,false"},
+			"fs_bsize" : {"set": "4096,8192,16384,32768,65536,131072,262144,524288,1048576"}
 	},
 
 	"smb" : {
@@ -118,6 +119,15 @@ def validate_key_val(inp_key, inp_val, conf_vals):
 				int(conf_vals['limit']), inp_val) != True:
 					throw_exception_with_msg("Invalid:" + inp_key + "=" + \
 					inp_val + "must use regex:" +  conf_vals)
+		elif conf_key == 'integer':
+			if int(inp_val) > int(conf_vals['max']):
+				throw_exception_with_msg("Invalid:" + inp_key + "=" + inp_val\
+				+ ", value must be less than or equals to: " +\
+				conf_vals['max'])
+			if int(inp_val) < int(conf_vals['min']):
+				throw_exception_with_msg("Invalid:" + inp_key + "=" + inp_val\
+				+ ", value must be greater than or equals to: " +\
+				conf_vals['min'])
 
 def validate_inp_config_params(conf_data, inp_args):
 	inp_params = {}
@@ -166,13 +176,16 @@ class FsCommand(Command):
 		sbparser.add_argument('action', help='action', choices=['create', 'list', 'delete'])
 		sbparser.add_argument('args', nargs='*', default=[], help='fs command options')
 		sbparser.set_defaults(command=FsCommand)
+		sbparser.add_argument('-cv', '--config_validation',
+			help='Optional JSON config file for validation rules.',\
+			default=cortxfscli_validation_rule_dev)
 
 	def validate_args_payload(self, args):
 		if args.action.lower() == 'list' and len(args.args) != 0:
 			throw_exception_with_msg("Too many args for " + \
 			args.action.lower())
 
-		if args.action.lower() == 'create' or args.action.lower() == 'delete':
+		if args.action.lower() == 'delete':
 			if len(args.args) != 1:
 				throw_exception_with_msg("Too many or no args for " + \
 				args.action.lower())
@@ -182,6 +195,44 @@ class FsCommand(Command):
 				throw_exception_with_msg("Invalid FS param: " + fs +\
 				", allowed regex:" + fs_name_regex + ", allowed max len:"\
 				+ str(fs_name_max_len))
+			return
+
+		if args.action.lower() == 'create':
+			if len(args.args) != 2:
+				throw_exception_with_msg("Too many or no args for " + \
+				args.action.lower())
+			# arg[0] is FS name, check it
+			fs = args.args[0]
+			if regex_pattern_check(fs_name_regex, fs_name_max_len, fs) != True:
+				throw_exception_with_msg("Invalid FS param: " + fs +\
+				", allowed regex:" + fs_name_regex + ", allowed max len:"\
+				+ str(fs_name_max_len))
+			# args.args[1] is options for FS, must needed for create
+			# fs_bsize=<bsize> value is expected, check it
+			if len(args.args) != 2:
+				throw_exception_with_msg("Too many or no args for " + \
+				args.action.lower())
+			'''
+			Note:
+			Production build should not have any option to pass custom
+			validation rules to this tool. Disable them!
+			Must only use the embedded rules.
+			Priority:
+				1. If local dev version exists, i.e. cortxfscli_validation_rule_dev 
+				2. If user passed an existing file
+				3. Embedded
+			''' 
+			if os.path.isfile(cortxfscli_validation_rule_dev) == True:
+				print ("Using dev validation rules")
+				cortxfscli_config_rules = read_conf_file(cortxfscli_validation_rule_dev)
+			elif os.path.isfile(args.config_validation) == True:
+				print ("Using external validation rules")
+				cortxfscli_config_rules = read_conf_file(args.config_validation)
+			else:
+				print ("Using embedded validation rules")
+				cortxfscli_config_rules = json.loads(cortxfscli_default_validation_rules)
+
+			validate_inp_config_params(cortxfscli_config_rules, args.args[1])
 
 class EndpointCommand(Command):
 	"""

@@ -5,11 +5,12 @@
             "secType" : {"set" : "none,sys"},
             "client" : {"max_count" : "10"},
             "clients" : {"regex" : "[^A-Za-z0-9.*/]", "limit" : "100"},
-            "disable_acl" : {"set" : "true,false"}
+            "disable_acl" : {"set" : "true,false"},
             "Squash" : {"set" : "no_root_squash,root_squash"},
             "access_type" : {"set" : "RW,R,W,None"},
             "protocols" : {"set" : "3,4,4.1,3:4"},
-            "pnfs_enabled" : {"set" : "true,false"}
+            "pnfs_enabled" : {"set" : "true,false"},
+            "fs_bsize" : {"set": "4096,8192,16384,32768,65536,131072,262144,524288,1048576"}
 	},
 
         "smb" : {

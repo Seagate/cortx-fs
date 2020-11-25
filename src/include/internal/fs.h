@@ -54,9 +54,11 @@ int cfs_fs_fini(void);
  *
  * @fs_name - file system name structure.
  *
+ * @fs_bsize - optional fs blocksize
+ *
  * @return 0 if successful, a negative "-errno" value in case of failure
  */
-int cfs_fs_create(const str256_t *fs_name);
+int cfs_fs_create(const str256_t *fs_name, const size_t *fs_bsize);
 
 /**
  * Detele FileSystem..

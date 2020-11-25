@@ -341,7 +341,7 @@ out:
 	return rc;
 }
 
-int cfs_fs_create(const str256_t *fs_name)
+int cfs_fs_create(const str256_t *fs_name, const size_t *fsbsize)
 {
         int rc = 0;
 	struct namespace *ns;
@@ -379,6 +379,7 @@ int cfs_fs_create(const str256_t *fs_name)
 	bufstat.st_atim.tv_sec = 0;
 	bufstat.st_mtim.tv_sec = 0;
 	bufstat.st_ctim.tv_sec = 0;
+	bufstat.st_blksize = fsbsize != NULL ? *fsbsize : CFS_DEFAULT_BLOCKSIZE;
 
 	RC_WRAP_LABEL(rc, delete_ns, kvtree_create, ns, (void *)&bufstat,
 		      sizeof(struct stat), &kvtree);

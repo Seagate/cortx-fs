@@ -28,7 +28,7 @@ set(DEFAULT_DSALINC "")
 set(DSALINC ${DEFAULT_DSALINC} CACHE PATH "Path to folder with dstore.h")
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -I\"${CMAKE_SOURCE_DIR}/include\"")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Werror -fPIC -g")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Werror -fPIC -g -lpthread")
 
 set(CORTXFS_BASE_VERSION ${BASE_VERSION})
 set(INSTALL_DIR_ROOT ${INSTALL_DIR_ROOT})
@@ -48,6 +48,19 @@ else (ENABLE_DASSERT)
 endif (ENABLE_DASSERT)
 
 message( STATUS "ENABLE_DASSERT : ${ENABLE_DASSERT}")
+
+# Option (To enable/disable ENABLE_TSDB_ADDB mode.)
+option(ENABLE_TSDB_ADDB "Enable ENABLE_TSDB_ADDB mode." OFF)
+
+if (ENABLE_TSDB_ADDB)
+	set(BCOND_ENABLE_TSDB_ADDB "%bcond_without")
+	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DENABLE_TSDB_ADDB")
+else (ENABLE_TSDB_ADDB)
+	set(BCOND_ENABLE_TSDB_ADDB "%bcond_with")
+	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
+endif (ENABLE_TSDB_ADDB)
+
+message( STATUS "ENABLE_TSDB_ADDB : ${ENABLE_TSDB_ADDB}" )
 
 include(CheckIncludeFiles)
 include(CheckLibraryExists)
