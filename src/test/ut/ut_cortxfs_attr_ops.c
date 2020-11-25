@@ -32,6 +32,7 @@
 static void set_ctime(void **state)
 {
 	struct ut_cfs_params *ut_cfs_objs = ENV_FROM_STATE(state);
+	struct cfs_fh *fh = NULL;
 
 	int rc = 0;
 	int flag = STAT_CTIME_SET;
@@ -47,23 +48,21 @@ static void set_ctime(void **state)
 
 	new_ctime = mktime(now_tm);
 
-	struct stat stat_in, stat_out;
+	struct stat stat_in, *stat_out;
 	memset(&stat_in, 0, sizeof(stat_in));
-	memset(&stat_out, 0, sizeof(stat_out));
 
 	stat_in.st_ctim.tv_sec = new_ctime;
 
-	rc = cfs_setattr(ut_cfs_objs->cfs_fs, &ut_cfs_objs->cred,
-				&ut_cfs_objs->file_inode, &stat_in, flag);
-
+	rc = cfs_fh_from_ino(ut_cfs_objs->cfs_fs, &ut_cfs_objs->file_inode,
+				&fh);
 	ut_assert_int_equal(rc, 0);
 
-	rc = cfs_getattr(ut_cfs_objs->cfs_fs, &ut_cfs_objs->cred,
-			&ut_cfs_objs->file_inode, &stat_out);
+	stat_out = cfs_fh_stat(fh);
 
+	rc = cfs_setattr(fh, &ut_cfs_objs->cred, &stat_in, flag);
 	ut_assert_int_equal(rc, 0);
 
-	ut_assert_int_equal(0, difftime(new_ctime, stat_out.st_ctime));
+	ut_assert_int_equal(0, difftime(new_ctime, stat_out->st_ctime));
 }
 
 /**
@@ -79,6 +78,7 @@ static void set_ctime(void **state)
 static void set_mtime(void **state)
 {
 	struct ut_cfs_params *ut_cfs_objs = ENV_FROM_STATE(state);
+	struct cfs_fh *fh = NULL;
 
 	int rc = 0;
 	int flag = STAT_MTIME_SET;
@@ -94,27 +94,25 @@ static void set_mtime(void **state)
 
 	new_mtime = mktime(now_tm);
 
-	struct stat stat_in,stat_out;
+	struct stat stat_in, *stat_out;
 	memset(&stat_in, 0, sizeof(stat_in));
-	memset(&stat_out, 0, sizeof(stat_out));
 
 	stat_in.st_mtim.tv_sec = new_mtime;
 
 	time(&cur_time);
 
-	rc = cfs_setattr(ut_cfs_objs->cfs_fs, &ut_cfs_objs->cred,
-				&ut_cfs_objs->file_inode, &stat_in, flag);
-
+	rc = cfs_fh_from_ino(ut_cfs_objs->cfs_fs, &ut_cfs_objs->file_inode,
+				&fh);
 	ut_assert_int_equal(rc, 0);
 
-	rc = cfs_getattr(ut_cfs_objs->cfs_fs, &ut_cfs_objs->cred,
-				&ut_cfs_objs->file_inode, &stat_out);
+	stat_out = cfs_fh_stat(fh);
 
+	rc = cfs_setattr(fh, &ut_cfs_objs->cred, &stat_in, flag);
 	ut_assert_int_equal(rc, 0);
 
-	ut_assert_int_equal(0, difftime(new_mtime, stat_out.st_mtime));
+	ut_assert_int_equal(0, difftime(new_mtime, stat_out->st_mtime));
 
-	if(difftime(stat_out.st_ctime, cur_time) < 0) {
+	if(difftime(stat_out->st_ctime, cur_time) < 0) {
 		ut_assert_true(0);
 	}
 }
@@ -132,6 +130,7 @@ static void set_mtime(void **state)
 static void set_atime(void **state)
 {
 	struct ut_cfs_params *ut_cfs_objs = ENV_FROM_STATE(state);
+	struct cfs_fh *fh = NULL;
 
 	int rc = 0;
 	int flag = STAT_ATIME_SET;
@@ -147,26 +146,25 @@ static void set_atime(void **state)
 
 	new_atime = mktime(now_tm);
 
-	struct stat stat_in, stat_out;
+	struct stat stat_in, *stat_out;
 	memset(&stat_in, 0, sizeof(stat_in));
-	memset(&stat_out, 0, sizeof(stat_out));
 
 	stat_in.st_atim.tv_sec = new_atime;
 
 	time(&cur_time);
 
-	rc = cfs_setattr(ut_cfs_objs->cfs_fs, &ut_cfs_objs->cred,
-				&ut_cfs_objs->file_inode, &stat_in, flag);
+	rc = cfs_fh_from_ino(ut_cfs_objs->cfs_fs, &ut_cfs_objs->file_inode,
+				&fh);
 	ut_assert_int_equal(rc, 0);
 
-	rc = cfs_getattr(ut_cfs_objs->cfs_fs, &ut_cfs_objs->cred,
-				&ut_cfs_objs->file_inode, &stat_out);
+	stat_out = cfs_fh_stat(fh);
 
+	rc = cfs_setattr(fh, &ut_cfs_objs->cred, &stat_in, flag);
 	ut_assert_int_equal(rc, 0);
 
-	ut_assert_int_equal(0, difftime(new_atime, stat_out.st_atime));
+	ut_assert_int_equal(0, difftime(new_atime, stat_out->st_atime));
 
-	if(difftime(stat_out.st_ctime, cur_time) < 0) {
+	if(difftime(stat_out->st_ctime, cur_time) < 0) {
 		ut_assert_true(0);
 	}
 }
@@ -184,6 +182,7 @@ static void set_atime(void **state)
 static void set_gid(void **state)
 {
 	struct ut_cfs_params *ut_cfs_objs = ENV_FROM_STATE(state);
+	struct cfs_fh *fh = NULL;
 
 	int rc = 0;
 	int flag = STAT_GID_SET;
@@ -192,27 +191,25 @@ static void set_gid(void **state)
 
 	time_t cur_time;
 
-	struct stat stat_in, stat_out;
+	struct stat stat_in, *stat_out;
 	memset(&stat_in, 0, sizeof(stat_in));
-	memset(&stat_out, 0, sizeof(stat_out));
 
 	stat_in.st_gid = new_gid;
 
 	time(&cur_time);
 
-	rc = cfs_setattr(ut_cfs_objs->cfs_fs, &ut_cfs_objs->cred,
-				&ut_cfs_objs->file_inode, &stat_in, flag);
-
+	rc = cfs_fh_from_ino(ut_cfs_objs->cfs_fs, &ut_cfs_objs->file_inode,
+				&fh);
 	ut_assert_int_equal(rc, 0);
 
-	rc = cfs_getattr(ut_cfs_objs->cfs_fs, &ut_cfs_objs->cred,
-				&ut_cfs_objs->file_inode, &stat_out);
+	stat_out = cfs_fh_stat(fh);
 
+	rc = cfs_setattr(fh, &ut_cfs_objs->cred, &stat_in, flag);
 	ut_assert_int_equal(rc, 0);
 
-	ut_assert_int_equal(stat_out.st_gid, new_gid);
+	ut_assert_int_equal(stat_out->st_gid, new_gid);
 
-	if(difftime(stat_out.st_ctime, cur_time) < 0) {
+	if(difftime(stat_out->st_ctime, cur_time) < 0) {
 		ut_assert_true(0);
 	}
 }
@@ -230,6 +227,7 @@ static void set_gid(void **state)
 static void set_uid(void **state)
 {
 	struct ut_cfs_params *ut_cfs_objs = ENV_FROM_STATE(state);
+	struct cfs_fh *fh = NULL;
 
 	int rc = 0;
 	int flag = STAT_UID_SET;
@@ -238,26 +236,25 @@ static void set_uid(void **state)
 
 	time_t cur_time;
 
-	struct stat stat_in, stat_out;
+	struct stat stat_in, *stat_out;
 	memset(&stat_in, 0, sizeof(stat_in));
-	memset(&stat_out, 0, sizeof(stat_out));
 
 	stat_in.st_uid = new_uid;
 
 	time(&cur_time);
 
-	rc = cfs_setattr(ut_cfs_objs->cfs_fs, &ut_cfs_objs->cred,
-				&ut_cfs_objs->file_inode, &stat_in, flag);
+	rc = cfs_fh_from_ino(ut_cfs_objs->cfs_fs, &ut_cfs_objs->file_inode,
+				&fh);
 	ut_assert_int_equal(rc, 0);
 
-	rc = cfs_getattr(ut_cfs_objs->cfs_fs, &ut_cfs_objs->cred,
-				&ut_cfs_objs->file_inode, &stat_out);
+	stat_out = cfs_fh_stat(fh);
 
+	rc = cfs_setattr(fh, &ut_cfs_objs->cred, &stat_in, flag);
 	ut_assert_int_equal(rc, 0);
 
-	ut_assert_int_equal(stat_out.st_uid, new_uid);
+	ut_assert_int_equal(stat_out->st_uid, new_uid);
 
-	if(difftime(stat_out.st_ctime, cur_time) < 0) {
+	if(difftime(stat_out->st_ctime, cur_time) < 0) {
 		ut_assert_true(0);
 	}
 }
