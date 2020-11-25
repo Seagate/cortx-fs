@@ -65,7 +65,6 @@ cortxfscli_default_validation_rules = """{
 			"proto" : {"str": "nfs"},
 			"status" : {"set" : "enabled,disabled"},
 			"secType" : {"set" : "none,sys"},
-			"Filesystem_id" : {"regex" : "[^0-9+.0-9+$]", "limit" : "100"},
 			"client" : {"max_count" : "10"},
 			"clients" : {"regex" : "[^A-Za-z0-9.*/]", "limit" : "100"},
 			"disable_acl" : {"set" : "true,false"},
