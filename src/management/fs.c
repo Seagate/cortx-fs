@@ -133,6 +133,10 @@ static int fs_create_process_data(struct controller_api *fs_create)
 	struct json_object *json_obj = NULL;
 	struct json_object *json_fs_name_obj = NULL;
 	struct json_object *json_fs_options_obj = NULL;
+	struct json_object *json_fs_bsize_obj = NULL;
+	struct json_object *json_fs_bsize_obj1 = NULL;
+	const char *str = NULL;
+	size_t fs_bsize = CFS_DEFAULT_BLOCKSIZE;
 
 	request = fs_create->request;
 
@@ -187,6 +191,37 @@ static int fs_create_process_data(struct controller_api *fs_create)
 					       JSON_C_TO_STRING_SPACED);
 
 		fs_create_api->req.fs_options = fs_options;
+
+		json_fs_bsize_obj = json_tokener_parse(fs_options);
+		json_object_object_get_ex(json_fs_bsize_obj, "fs_bsize",
+					  &json_fs_bsize_obj1);
+		if (json_fs_bsize_obj1 != NULL) {
+			str = json_object_get_string(json_fs_bsize_obj1);
+			if (str) {
+				fs_bsize = (size_t) strtol(str, (char **)NULL,
+					   10);
+				if (fs_bsize < CFS_MIN_BLOCKSIZE ||
+				    fs_bsize > CFS_MAX_BLOCKSIZE) {
+					log_err("fs bsize range invalid: %lu",
+						fs_bsize);
+					rc = EINVAL;
+					request_set_errcode(request, rc);
+					fs_create_send_response(fs_create, NULL);
+					goto error;
+				} else if (cfs_is_bsize_valid(fs_bsize) != 0) {
+					log_err("fs bsize %lu is not valid",
+						fs_bsize);
+					rc = EINVAL;
+					request_set_errcode(request, rc);
+					fs_create_send_response(fs_create, NULL);
+					goto error;
+				} else {
+					log_info("using configured bsize %lu",
+						 fs_bsize);
+				}
+			}
+			json_object_put(json_fs_bsize_obj);
+		}
 	}
 
 	/* 2. Compose cfs_fs_create api params. */
@@ -199,16 +234,17 @@ static int fs_create_process_data(struct controller_api *fs_create)
 		goto error;
 	}
 
-	log_debug("Creating FS : %s Options: %s.",
+	log_info("Creating FS : %s Options: %s. fs_bsize: %lu",
 		  fs_create_api->req.fs_name,
-		  fs_create_api->req.fs_options);
+		  fs_create_api->req.fs_options,
+		  fs_bsize);
 
 	str256_from_cstr(fs_name,
 			 fs_create_api->req.fs_name,
 			 fs_name_len);
 
 	/* 3. Send create fs request */
-	rc = cfs_fs_create(&fs_name);
+	rc = cfs_fs_create(&fs_name, &fs_bsize);
 	request_set_errcode(request, -rc);
 	log_debug("FS create status code : %d.", rc);
 
