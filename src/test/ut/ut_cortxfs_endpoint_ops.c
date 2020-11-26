@@ -31,10 +31,10 @@ static void test_cfs_endpoint_create(void)
 	str256_t fs_name;
 	str256_from_cstr(fs_name, name, strlen(name));
 
-	rc = cfs_fs_create(&fs_name);
+	rc = cfs_fs_create(&fs_name, NULL);
 	ut_assert_int_equal(rc, 0);
 
-	const char *endpoint_options  = "{ \"proto\": \"nfs\", \"mode\": \"rw\", \"secType\": \"sys\", \"Filesystem_id\": \"192.168\", \"client\": \"1\", \"clients\": \"*\", \"Squash\": \"no_root_squash\", \"access_type\": \"RW\", \"protocols\": \"4\" }";
+	const char *endpoint_options  = "{ \"proto\": \"nfs\", \"mode\": \"rw\", \"secType\": \"sys\", \"client\": \"1\", \"clients\": \"*\", \"Squash\": \"no_root_squash\", \"access_type\": \"RW\", \"protocols\": \"4\" }";
 
 	rc = cfs_endpoint_create(&fs_name, endpoint_options);
 	ut_assert_int_equal(rc, 0);

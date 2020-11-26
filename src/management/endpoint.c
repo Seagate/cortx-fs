@@ -29,6 +29,9 @@
 #include <debug.h>
 #include "internal/controller.h"
 #include "internal/fs.h"
+#include <limits.h> /* NAME_MAX */
+
+#define FILESYSTEM_ID_PREFIX "192."
 
 /**
  * ##############################################################
@@ -85,6 +88,10 @@ static int endpoint_create_process_data(struct controller_api *endpoint_create)
 	struct json_object *json_obj = NULL;
 	struct json_object *json_fs_name_obj = NULL;
 	struct json_object *json_endpoint_options_obj = NULL;
+	struct json_object *json_resp_obj = NULL;
+        uint16_t fs_id = 0;
+        struct cfs_fs *fs = NULL;
+        char str[NAME_MAX];
 
 	request = endpoint_create->request;
 
@@ -156,6 +163,25 @@ static int endpoint_create_process_data(struct controller_api *endpoint_create)
 	str256_from_cstr(endpoint_name,
 			 endpoint_create_api->req.endpoint_name,
 			 endpoint_name_len);
+
+	rc = cfs_fs_lookup(&endpoint_name, &fs);
+        if (rc != 0) {
+                log_err("Can't create endpoint for non existent fs");
+                rc = -ENOENT;
+		request_set_errcode(request, rc);
+		endpoint_create_send_response(endpoint_create, NULL);
+                goto error;
+        }
+ 
+        /* get filesyetm ID */
+        cfs_fs_get_id(fs, &fs_id);
+
+        snprintf(str, sizeof(str), FILESYSTEM_ID_PREFIX"%d", fs_id);
+
+        json_resp_obj = json_object_new_string(str);
+        json_object_object_add(json_endpoint_options_obj,
+                                "Filesystem_id",
+                                json_resp_obj);
 
 	/* endpoint options */
 	endpoint_create_api->req.endpoint_options =

@@ -54,7 +54,7 @@ int ut_cfs_fs_setup(void **state)
 	str256_from_cstr(fs_name, ut_cfs_obj->fs_name,
 				strlen(ut_cfs_obj->fs_name));
 	rc = 0;
-	rc = cfs_fs_create(&fs_name);
+	rc = cfs_fs_create(&fs_name, NULL);
 
 	if (rc != 0) {
 		fprintf(stderr, "Failed to create FS %s, rc=%d\n",
