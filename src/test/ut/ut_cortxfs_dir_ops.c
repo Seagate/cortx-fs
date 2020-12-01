@@ -1153,7 +1153,7 @@ static void delete_nonempty_dir(void **state)
 	ut_dir_obj->ut_cfs_obj.file_name = ut_dir_obj->name_list[0];
 	rc = ut_dir_delete(state);
 
-	//Reverting to original parent(d1) as it will be used in teardown to delete d2
+	/* Reverting to original parent(d1) as it will be used in teardown to delete d2 */
 	ut_dir_obj->ut_cfs_obj.parent_inode = parent_inode_tmp;
 	assert_int_equal(rc, -ENOTEMPTY);
 }
@@ -1174,12 +1174,12 @@ static int delete_nonempty_dir_teardown(void **state)
 
 	struct ut_dir_env *ut_dir_obj = DIR_ENV_FROM_STATE(state);
 
-	//Delete directory d2 inside d1
+	/* Delete directory d2 inside d1 */
 	ut_dir_obj->ut_cfs_obj.file_name = ut_dir_obj->name_list[1];
 	rc = ut_dir_delete(state);
 	assert_int_equal(rc, 0);
 
-	//Delete a directory d1 in root directory
+	/* Delete a directory d1 in root directory */
 	ut_dir_obj->ut_cfs_obj.parent_inode = CFS_ROOT_INODE;
 	ut_dir_obj->ut_cfs_obj.file_name = ut_dir_obj->name_list[0];
 
