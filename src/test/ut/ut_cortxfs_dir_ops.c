@@ -1100,6 +1100,161 @@ static int dir_ops_teardown(void **state)
 	return rc;
 }
 
+/**
+ * Setup for removal of non empty directory.
+ * Description: create a directory and create another directory inside it..
+ * Strategy:
+ *  1. Create a directory.
+ *  2. Create another directory inside newly created directory in step 2
+ * Expected behavior:
+ *  1. No errors from CORTXFS API.
+ *  2. Both directory creation should be successful.
+ */
+static int delete_nonempty_dir_setup(void **state)
+{
+
+	int rc = 0;
+
+	struct ut_dir_env *ut_dir_obj = DIR_ENV_FROM_STATE(state);
+
+	ut_dir_obj->name_list[0] = "test_delete_nonempty_dir";
+	ut_dir_obj->name_list[1] = "test_delete_nonempty_dir_nested";
+
+	ut_dir_obj->ut_cfs_obj.file_name = ut_dir_obj->name_list[0];
+	rc = ut_dir_create(state);
+	ut_assert_int_equal(rc, 0);
+
+	ut_dir_obj->ut_cfs_obj.file_name = ut_dir_obj->name_list[1];
+	ut_dir_obj->ut_cfs_obj.parent_inode = ut_dir_obj->ut_cfs_obj.file_inode;
+
+	rc = ut_dir_create(state);
+	ut_assert_int_equal(rc, 0);
+
+	return rc;
+}
+
+/**
+ * Test for deletion of non empty directory
+ * Description: Delete non empty directory.
+ * Strategy:
+ * 1. Delete a directory d1 which contains another directory d2
+ * Expected behavior:
+ * 1. No errors from CORTXFS API.
+ * 2. Directory deletion should fail with error -ENOTEMPTY.
+ */
+static void delete_nonempty_dir(void **state)
+{
+	int rc = 0;
+
+	struct ut_dir_env *ut_dir_obj = DIR_ENV_FROM_STATE(state);
+	cfs_ino_t parent_inode_tmp = ut_dir_obj->ut_cfs_obj.parent_inode;
+
+	ut_dir_obj->ut_cfs_obj.parent_inode = CFS_ROOT_INODE;
+	ut_dir_obj->ut_cfs_obj.file_name = ut_dir_obj->name_list[0];
+	rc = ut_dir_delete(state);
+
+	/* Reverting to original parent(d1) as it will be used in teardown to delete d2 */
+	ut_dir_obj->ut_cfs_obj.parent_inode = parent_inode_tmp;
+	assert_int_equal(rc, -ENOTEMPTY);
+}
+
+/**
+ * Teardown for deleting non empty directory test
+ * Description: Delete directories.
+ * Strategy:
+ *  1. Delete directory d2 inside d1
+ *  2. Delete a directory d1 in root directory
+ * Expected behavior:
+ *  1. No errors from CORTXFS API.
+ *  2. Directory deletion should be successful.
+ */
+static int delete_nonempty_dir_teardown(void **state)
+{
+	int rc = 0;
+
+	struct ut_dir_env *ut_dir_obj = DIR_ENV_FROM_STATE(state);
+
+	/* Delete directory d2 inside d1 */
+	ut_dir_obj->ut_cfs_obj.file_name = ut_dir_obj->name_list[1];
+	rc = ut_dir_delete(state);
+	assert_int_equal(rc, 0);
+
+	/* Delete a directory d1 in root directory */
+	ut_dir_obj->ut_cfs_obj.parent_inode = CFS_ROOT_INODE;
+	ut_dir_obj->ut_cfs_obj.file_name = ut_dir_obj->name_list[0];
+
+	rc = ut_dir_delete(state);
+	assert_int_equal(rc, 0);
+
+	return rc;
+}
+
+/**
+ * Test for deletion of non existing directory
+ * Description: Delete non existing directory.
+ * Strategy:
+ * 1. Delete a directory d1 which does not exist
+ * Expected behavior:
+ * 1. No errors from CORTXFS API.
+ * 2. Directory deletion should fail with error -ENOENT.
+ */
+static void delete_nonexistent_dir(void **state)
+{
+	int rc = 0;
+
+	struct ut_dir_env *ut_dir_obj = DIR_ENV_FROM_STATE(state);
+
+	ut_dir_obj->ut_cfs_obj.file_name = "test_nonexistent_dir";
+	rc = ut_dir_delete(state);
+	assert_int_equal(rc, -ENOENT);
+}
+
+
+/**
+ * Setup for deletion of empty directory.
+ * Description: create a directory
+ * Strategy:
+ *  1. Create a directory.
+ * Expected behavior:
+ *  1. No errors from CORTXFS API.
+ *  2. Directory creation should be successful.
+ */
+static int delete_empty_dir_setup(void **state)
+{
+        int rc = 0;
+
+        struct ut_dir_env *ut_dir_obj = DIR_ENV_FROM_STATE(state);
+
+        ut_dir_obj->name_list[0] = "test_delete_empty_dir";
+
+        ut_dir_obj->ut_cfs_obj.file_name = ut_dir_obj->name_list[0];
+        rc = ut_dir_create(state);
+        ut_assert_int_equal(rc, 0);
+
+        return rc;
+}
+
+/**
+ * Test for deletion of empty directory
+ * Description: Delete empty directory.
+ * Strategy:
+ * 1. Delete a directory which is empty
+ * Expected behavior:
+ * 1. No errors from CORTXFS API.
+ * 2. Directory deletion should be successful.
+ */
+static void delete_empty_dir(void **state)
+{
+        int rc = 0;
+
+        struct ut_dir_env *ut_dir_obj = DIR_ENV_FROM_STATE(state);
+
+        ut_dir_obj->ut_cfs_obj.file_name = ut_dir_obj->name_list[0];
+        rc = ut_dir_delete(state);
+
+        assert_int_equal(rc, 0);
+}
+
 int main(void)
 {
 	int rc = 0;
@@ -1146,6 +1301,10 @@ int main(void)
 			     create_remove_subdir_teardown),
 		ut_test_case(link_unlink_file, link_unlink_file_setup,
 			     link_unlink_file_teardown),
+		ut_test_case(delete_nonempty_dir, delete_nonempty_dir_setup,
+                             delete_nonempty_dir_teardown),
+		ut_test_case(delete_nonexistent_dir, NULL, NULL),
+		ut_test_case(delete_empty_dir, delete_empty_dir_setup, NULL),
 	};
 
 	int test_count = sizeof(test_list)/sizeof(test_list[0]);
