@@ -871,22 +871,24 @@ static void create_remove_subdir(void **state)
 	struct ut_cfs_params *ut_cfs_obj = ENV_FROM_STATE(state);
 	cfs_ino_t *pinode =  &ut_cfs_obj->file_inode;
 	cfs_ino_t cinode;
-	struct cfs_fh *parent_fh = NULL;
+	struct cfs_fh *pfh_before_create = NULL;
+	struct cfs_fh *pfh_after_create = NULL;
+	struct cfs_fh *pfh_after_rmdir = NULL;
 	struct stat *before_create = NULL;
 	struct stat *after_create = NULL;
 	struct stat *after_rmdir = NULL;
 
-	rc = cfs_fh_from_ino(ut_cfs_obj->cfs_fs, pinode, &parent_fh);
+	rc = cfs_fh_from_ino(ut_cfs_obj->cfs_fs, pinode, &pfh_before_create);
 	ut_assert_int_equal(rc, 0);
-	before_create = cfs_fh_stat(parent_fh);
+	before_create = cfs_fh_stat(pfh_before_create);
 
 	rc = cfs_mkdir(ut_cfs_obj->cfs_fs, &ut_cfs_obj->cred,
 		       pinode, "childdir", 0755, &cinode);
 	ut_assert_int_equal(rc, 0);
 
-	rc = cfs_fh_from_ino(ut_cfs_obj->cfs_fs, pinode, &parent_fh);
+	rc = cfs_fh_from_ino(ut_cfs_obj->cfs_fs, pinode, &pfh_after_create);
 	ut_assert_int_equal(rc, 0);
-	after_create = cfs_fh_stat(parent_fh);
+	after_create = cfs_fh_stat(pfh_after_create);
 
 	/* if ctime after create has not changed than assert */
 	if (after_create->st_ctim.tv_sec == before_create->st_ctim.tv_sec &&
@@ -906,9 +908,9 @@ static void create_remove_subdir(void **state)
 		       pinode, "childdir");
 	ut_assert_int_equal(rc, 0);
 
-	rc = cfs_fh_from_ino(ut_cfs_obj->cfs_fs, pinode, &parent_fh);
+	rc = cfs_fh_from_ino(ut_cfs_obj->cfs_fs, pinode, &pfh_after_rmdir);
 	ut_assert_int_equal(rc, 0);
-	after_rmdir = cfs_fh_stat(parent_fh);
+	after_rmdir = cfs_fh_stat(pfh_after_rmdir);
 
 	/* if ctime after rmdir has not changed than assert */
 	if (after_rmdir->st_ctim.tv_sec == after_create->st_ctim.tv_sec &&
@@ -921,6 +923,20 @@ static void create_remove_subdir(void **state)
 	    after_rmdir->st_mtim.tv_nsec == after_create->st_mtim.tv_nsec) {
 
 		ut_assert_true(0);
+	}
+
+	if (pfh_before_create != NULL) {
+		cfs_fh_destroy(pfh_before_create);
+	}
+	if (pfh_after_create != NULL) {
+		cfs_fh_destroy(pfh_after_create);
+	}
+	if (pfh_after_rmdir != NULL) {
+		/* This test does not update parent FH after
+		 * creating child dir, but should it do?
+		 * If no, then below should not dump stat.
+		 */
+		cfs_fh_destroy_and_dump_stat(pfh_after_rmdir);
 	}
 }
 

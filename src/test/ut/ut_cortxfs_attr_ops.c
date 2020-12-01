@@ -54,7 +54,7 @@ static void set_ctime(void **state)
 	stat_in.st_ctim.tv_sec = new_ctime;
 
 	rc = cfs_fh_from_ino(ut_cfs_objs->cfs_fs, &ut_cfs_objs->file_inode,
-				&fh);
+			     &fh);
 	ut_assert_int_equal(rc, 0);
 
 	stat_out = cfs_fh_stat(fh);
@@ -63,6 +63,10 @@ static void set_ctime(void **state)
 	ut_assert_int_equal(rc, 0);
 
 	ut_assert_int_equal(0, difftime(new_ctime, stat_out->st_ctime));
+
+	if (fh != NULL) {
+		cfs_fh_destroy_and_dump_stat(fh);
+	}
 }
 
 /**
@@ -102,7 +106,7 @@ static void set_mtime(void **state)
 	time(&cur_time);
 
 	rc = cfs_fh_from_ino(ut_cfs_objs->cfs_fs, &ut_cfs_objs->file_inode,
-				&fh);
+			     &fh);
 	ut_assert_int_equal(rc, 0);
 
 	stat_out = cfs_fh_stat(fh);
@@ -114,6 +118,10 @@ static void set_mtime(void **state)
 
 	if(difftime(stat_out->st_ctime, cur_time) < 0) {
 		ut_assert_true(0);
+	}
+
+	if (fh != NULL) {
+		cfs_fh_destroy_and_dump_stat(fh);
 	}
 }
 
@@ -154,7 +162,7 @@ static void set_atime(void **state)
 	time(&cur_time);
 
 	rc = cfs_fh_from_ino(ut_cfs_objs->cfs_fs, &ut_cfs_objs->file_inode,
-				&fh);
+			     &fh);
 	ut_assert_int_equal(rc, 0);
 
 	stat_out = cfs_fh_stat(fh);
@@ -166,6 +174,10 @@ static void set_atime(void **state)
 
 	if(difftime(stat_out->st_ctime, cur_time) < 0) {
 		ut_assert_true(0);
+	}
+
+	if (fh != NULL) {
+		cfs_fh_destroy_and_dump_stat(fh);
 	}
 }
 
@@ -199,7 +211,7 @@ static void set_gid(void **state)
 	time(&cur_time);
 
 	rc = cfs_fh_from_ino(ut_cfs_objs->cfs_fs, &ut_cfs_objs->file_inode,
-				&fh);
+			     &fh);
 	ut_assert_int_equal(rc, 0);
 
 	stat_out = cfs_fh_stat(fh);
@@ -211,6 +223,10 @@ static void set_gid(void **state)
 
 	if(difftime(stat_out->st_ctime, cur_time) < 0) {
 		ut_assert_true(0);
+	}
+
+	if (fh != NULL) {
+		cfs_fh_destroy_and_dump_stat(fh);
 	}
 }
 
@@ -244,7 +260,7 @@ static void set_uid(void **state)
 	time(&cur_time);
 
 	rc = cfs_fh_from_ino(ut_cfs_objs->cfs_fs, &ut_cfs_objs->file_inode,
-				&fh);
+			     &fh);
 	ut_assert_int_equal(rc, 0);
 
 	stat_out = cfs_fh_stat(fh);
@@ -256,6 +272,10 @@ static void set_uid(void **state)
 
 	if(difftime(stat_out->st_ctime, cur_time) < 0) {
 		ut_assert_true(0);
+	}
+
+	if (fh != NULL) {
+		cfs_fh_destroy_and_dump_stat(fh);
 	}
 }
 

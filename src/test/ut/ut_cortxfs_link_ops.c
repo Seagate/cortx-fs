@@ -252,6 +252,10 @@ static void create_hardlink(void **state)
 	if(difftime(stat_out->st_ctime, cur_time) < 0) {
 		ut_assert_true(0);
 	} 
+
+	if (fh != NULL) {
+		cfs_fh_destroy(fh);
+	}
 }
 
 /**
@@ -314,6 +318,10 @@ static void create_longname255_hardlink(void **state)
 	if(difftime(stat_out->st_ctime, cur_time) < 0) {
 		ut_assert_true(0);
 	} 
+
+	if (fh != NULL) {
+		cfs_fh_destroy(fh);
+	}
 }
 
 /**
@@ -378,6 +386,10 @@ static void create_hardlink_delete_original(void **state)
 	if(difftime(stat_out->st_ctime, cur_time) < 0) {
 		ut_assert_true(0);
 	}
+
+	if (fh != NULL) {
+		cfs_fh_destroy(fh);
+	}
 }
 
 /**
@@ -439,6 +451,10 @@ static void create_hardlink_delete_link(void **state)
 
 	if(difftime(stat_out->st_ctime, cur_time) < 0) {
 		ut_assert_true(0);
+	}
+
+	if (fh != NULL) {
+		cfs_fh_destroy(fh);
 	}
 }
 

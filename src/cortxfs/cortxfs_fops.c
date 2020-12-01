@@ -81,7 +81,7 @@ int cfs_creat_ex(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_ino_t *parent,
 		 int stat_in_flags, cfs_ino_t *newfile,
 		 struct stat *stat_out)
 {
-	int rc, rc2;
+	int rc;
 	cfs_ino_t object = 0;
 	struct cfs_fh *parent_fh = NULL;
 	struct cfs_fh *child_fh = NULL;
@@ -108,9 +108,11 @@ int cfs_creat_ex(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_ino_t *parent,
 
 	RC_WRAP_LABEL(rc, out, cfs_creat, parent_fh, cred, name, mode,
 		      &object);
-	RC_WRAP_LABEL(rc, cleanup, cfs_setattr, parent_fh, cred, stat_in,
+	RC_WRAP_LABEL(rc, cleanup, cfs_fh_from_ino,
+		      cfs_fs, &object, &child_fh);
+	RC_WRAP_LABEL(rc, cleanup, cfs_setattr, child_fh, cred, stat_in,
 		      stat_in_flags);
-	stat_out = cfs_fh_stat(parent_fh);
+	memcpy(stat_out, cfs_fh_stat(child_fh), sizeof(struct stat));
 
 	RC_WRAP(kvs_end_transaction, kvstor, &index);
 
@@ -119,12 +121,6 @@ int cfs_creat_ex(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_ino_t *parent,
 
 cleanup:
 	if (object != 0) {
-		rc2 = cfs_fh_from_ino(cfs_fs, &object, &child_fh);
-		/* Atleast we should be able to construct FH otherwise not
-		 * possible to operate further
-		 */
-		dassert(rc2 == 0);
-
 		/* We don't have transactions, so that let's just remove the
 		 * object.
 		 */
@@ -135,8 +131,8 @@ cleanup:
 			cfs_fh_destroy(child_fh);
 		}
 
-		log_err("cfs_fs=%p parent_ino=%llu object=%llu name=%s rc=%d"
-			"rc2=%d", cfs_fs, *parent, object, name, rc, rc2);
+		log_err("cfs_fs=%p parent_ino=%llu object=%llu name=%s rc=%d",
+			cfs_fs, *parent, object, name, rc);
 	}
 
 out:
@@ -278,7 +274,7 @@ out:
 	}
 
 	if (fh != NULL) {
-		cfs_fh_destroy(fh);
+		cfs_fh_destroy_and_dump_stat(fh);
 	}
 
 	return rc;

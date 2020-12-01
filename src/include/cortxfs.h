@@ -295,21 +295,6 @@ struct cfs_inode_attr_key {
 
 /* CORTXFS operations */
 /**
- * Gets attributes for a known inode.
- *
- * @note: the call is similar to stat() call in libc. It uses the structure
- * "struct stat" defined in the libC.
- * @param ctx - Filesystem context
- * @param cred - pointer to user's credentials
- * @param ino - pointer to current inode
- * @param stat - [OUT] points to inode's stat
- *
- * @return 0 if successful, a negative "-errno" value in case of failure
- */
-int cfs_getattr(struct cfs_fs *cfs_fs, const cfs_cred_t *cred,
-		const cfs_ino_t *ino, struct stat *stat);
-
-/**
  * Sets attributes for a known inode.
  *
  * This call uses a struct stat structure as input. This structure will
