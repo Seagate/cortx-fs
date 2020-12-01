@@ -283,7 +283,7 @@ static int fs_create_process_request(struct controller_api *fs_create,
 		 * Expecting create request fs info.
 		 */
 		rc = EINVAL;
-		request_set_errcode(request, rc);
+		request_set_errcode(request, INVALID_PAYLOAD);
 		fs_create_send_response(fs_create, NULL);
 		goto error;
 	}
@@ -294,7 +294,7 @@ static int fs_create_process_request(struct controller_api *fs_create,
 		 * modification of filesystem
 		 */
 		rc = EINVAL;
-		request_set_errcode(request, rc);
+		request_set_errcode(request, INVALID_ETAG);
 		fs_create_send_response(fs_create, NULL);
 		goto error;
 	}
@@ -400,8 +400,12 @@ static int fs_delete_send_response(struct controller_api *fs_delete, void *args)
 
 	rc = request_get_errcode(request);
 	if (rc != 0) {
-		/* Send error response message. */
 		resp_code = errno_to_http_code(rc);
+
+		/* Send error response message. */
+		const char *msg = fs_delete_errno_to_respmsg(rc);
+		rc = request_set_err_resp(request, msg);
+
 	} else {
 		resp_code = EVHTP_RES_200;
 	}
@@ -442,7 +446,7 @@ static int fs_delete_process_request(struct controller_api *fs_delete,
 		 * FS delete request doesn't expect any payload data.
 		 */
 		rc = EINVAL;
-		request_set_errcode(request, rc);
+		request_set_errcode(request, INVALID_PAYLOAD);
 		fs_delete_send_response(fs_delete, NULL);
 		goto error;
 	}
@@ -455,8 +459,8 @@ static int fs_delete_process_request(struct controller_api *fs_delete,
 	if (fs_delete_api->req.fs_name == NULL) {
 		log_err("No FS name.");
 		rc = EINVAL;
-		request_set_errcode(request, rc);
-		fs_create_send_response(fs_delete, NULL);
+		request_set_errcode(request, INVALID_PATH_PARAMS);
+		fs_delete_send_response(fs_delete, NULL);
 		goto error;
 	}
 
@@ -464,8 +468,8 @@ static int fs_delete_process_request(struct controller_api *fs_delete,
 	if (fs_name_len > 255) {
 		log_err("FS name too long.");
 		rc = EINVAL;
-		request_set_errcode(request, rc);
-		fs_create_send_response(fs_delete, NULL);
+		request_set_errcode(request, INVALID_PATH_PARAMS);
+		fs_delete_send_response(fs_delete, NULL);
 		goto error;
 	}
 
@@ -479,8 +483,8 @@ static int fs_delete_process_request(struct controller_api *fs_delete,
 	if (fs_name_hash == NULL) {	
 		log_err("Object hash not sent");
 		rc = EINVAL;
-		request_set_errcode(request, rc);
-		fs_create_send_response(fs_delete, NULL);
+		request_set_errcode(request, MISSING_ETAG);
+		fs_delete_send_response(fs_delete, NULL);
 		goto error;
 	}
 
@@ -498,16 +502,16 @@ static int fs_delete_process_request(struct controller_api *fs_delete,
 	if (rc) {
 		log_err("Error Computing hash, rc = %d, fs_name = %s",
 			rc, fs_delete_api->req.fs_name);
-		request_set_errcode(request, rc);
-		fs_create_send_response(fs_delete, NULL);
+		request_set_errcode(request, BAD_DIGEST);
+		fs_delete_send_response(fs_delete, NULL);
 		goto error;
 	}
 
 	rc = md5hash_get_string(&hash, &hash_str);
 	if (rc) {
 		log_err("Error getting hash as a string.");
-		request_set_errcode(request, rc);
-		fs_create_send_response(fs_delete, NULL);
+		request_set_errcode(request, BAD_DIGEST);
+		fs_delete_send_response(fs_delete, NULL);
 		goto error;
 	}
 
@@ -518,8 +522,8 @@ static int fs_delete_process_request(struct controller_api *fs_delete,
 	rc = md5hash_validate(&hash_str, &request_hash_str);
 	if (rc) {
 		log_err("Hash does not match");
-		request_set_errcode(request, rc);
-		fs_create_send_response(fs_delete, NULL);
+		request_set_errcode(request, BAD_DIGEST);
+		fs_delete_send_response(fs_delete, NULL);
 		goto error;
 	}
 
