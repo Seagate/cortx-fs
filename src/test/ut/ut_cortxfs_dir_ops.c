@@ -1209,6 +1209,52 @@ static void delete_nonexistent_dir(void **state)
 	assert_int_equal(rc, -ENOENT);
 }
 
+
+/**
+ * Setup for deletion of empty directory.
+ * Description: create a directory
+ * Strategy:
+ *  1. Create a directory.
+ * Expected behavior:
+ *  1. No errors from CORTXFS API.
+ *  2. Directory creation should be successful.
+ */
+static int delete_empty_dir_setup(void **state)
+{
+        int rc = 0;
+
+        struct ut_dir_env *ut_dir_obj = DIR_ENV_FROM_STATE(state);
+
+        ut_dir_obj->name_list[0] = "test_delete_empty_dir";
+
+        ut_dir_obj->ut_cfs_obj.file_name = ut_dir_obj->name_list[0];
+        rc = ut_dir_create(state);
+        ut_assert_int_equal(rc, 0);
+
+        return rc;
+}
+
+/**
+ * Test for deletion of empty directory
+ * Description: Delete empty directory.
+ * Strategy:
+ * 1. Delete a directory which is empty
+ * Expected behavior:
+ * 1. No errors from CORTXFS API.
+ * 2. Directory deletion should be successful.
+ */
+static void delete_empty_dir(void **state)
+{
+        int rc = 0;
+
+        struct ut_dir_env *ut_dir_obj = DIR_ENV_FROM_STATE(state);
+
+        ut_dir_obj->ut_cfs_obj.file_name = ut_dir_obj->name_list[0];
+        rc = ut_dir_delete(state);
+
+        assert_int_equal(rc, 0);
+}
+
 int main(void)
 {
 	int rc = 0;
@@ -1258,6 +1304,7 @@ int main(void)
 		ut_test_case(delete_nonempty_dir, delete_nonempty_dir_setup,
                              delete_nonempty_dir_teardown),
 		ut_test_case(delete_nonexistent_dir, NULL, NULL),
+		ut_test_case(delete_empty_dir, delete_empty_dir_setup, NULL),
 	};
 
 	int test_count = sizeof(test_list)/sizeof(test_list[0]);
