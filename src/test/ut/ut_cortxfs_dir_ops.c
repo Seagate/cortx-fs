@@ -932,11 +932,7 @@ static void create_remove_subdir(void **state)
 		cfs_fh_destroy(pfh_after_create);
 	}
 	if (pfh_after_rmdir != NULL) {
-		/* This test does not update parent FH after
-		 * creating child dir, but should it do?
-		 * If no, then below should not dump stat.
-		 */
-		cfs_fh_destroy_and_dump_stat(pfh_after_rmdir);
+		cfs_fh_destroy(pfh_after_rmdir);
 	}
 }
 
