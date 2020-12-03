@@ -374,6 +374,10 @@ int cfs_readdir(struct cfs_fs *cfs_fs, const cfs_cred_t *cred,
 		const cfs_ino_t *dir_ino,
 		cfs_readdir_cb_t cb,
 		void *cb_ctx);
+
+int cfs_readdir_v1(struct cfs_fs *cfs_fs, const cfs_cred_t *cred,
+		   const cfs_ino_t *dir_ino, cfs_readdir_cb_t cb, void *cb_ctx);
+
 /**
  * Creates a directory.
  *
