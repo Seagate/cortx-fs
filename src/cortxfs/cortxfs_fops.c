@@ -207,7 +207,7 @@ out:
 		cfs_fh_destroy_and_dump_stat(fh);
 	}
 
-	log_trace("cfs_fs=%p ino=%llu fd=%p count=%lu offset=%ld rc=%d",
+	log_test("TEST TEST TEST cfs_fs=%p ino=%llu fd=%p count=%lu offset=%ld rc=%d",
 		  cfs_fs, fd->ino, fd, count, (long)offset, rc);
 	return rc;
 }

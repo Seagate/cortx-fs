@@ -34,6 +34,9 @@
 #include <debug.h>
 #include <management.h>
 #include <nsal.h> /* nsal_init,fini */
+#include <m0log.h>
+
+const int cortxfs_magic_symbol = 2813;
 
 static struct collection_item *cfg_items;
 
@@ -82,11 +85,13 @@ int cfs_init(const char *config_path, const struct cfs_endpoint_ops *e_ops)
                 rc = -EINVAL;
                 goto out;
         }
+
 	rc = utils_init(cfg_items);
 	if (rc != 0) {
 		log_err("utils_init failed, rc=%d", rc);
                 goto log_cleanup;
         }
+
 	rc = nsal_module_init(cfg_items);
         if (rc) {
                 log_err("nsal_init failed, rc=%d", rc);
@@ -107,7 +112,31 @@ int cfs_init(const char *config_path, const struct cfs_endpoint_ops *e_ops)
 		log_err("management_init failed, rc=%d", rc);
                 goto cfs_fs_cleanup;
         }
+
+	rc = m0log_setup();
+	if (rc != 0) {
+		goto out;
+	}
+	rc = utils_register_magic_symbol();
+	if (rc != 0) {
+		goto out;
+	}
+	rc = nsal_register_magic_symbol();
+	if (rc != 0) {
+		goto out;
+	}
+	rc = dsal_register_magic_symbol();
+	if (rc != 0) {
+		goto out;
+	}
+	rc = cortxfs_register_magic_symbol();
+	if (rc != 0) {
+		goto out;
+	}
+
+	enable_m0_log();
 	goto out;
+
 cfs_fs_cleanup:
 	cfs_fs_fini();
 dsal_cleanup:
@@ -155,6 +184,18 @@ int cfs_fini(void)
 	if (rc) {
                 log_err("log_fini failed, rc=%d ", rc);
         }
+	m0log_fini();
 	free_ini_config_errors(cfg_items);
         return rc;
+}
+
+int cortxfs_register_magic_symbol(void)
+{
+	int rc = 0;
+
+	rc = m0log_add_magic_sym((const void*)&cortxfs_magic_symbol);
+	if (rc) {
+		log_err("adding magic symbol failed at cortxfs, rc=%d", rc);
+	}
+	return rc;
 }
