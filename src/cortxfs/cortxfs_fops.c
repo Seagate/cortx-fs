@@ -81,8 +81,8 @@ int cfs_creat_ex(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_ino_t *parent,
 		 int stat_in_flags, cfs_ino_t *newfile,
 		 struct stat *stat_out)
 {
-	int rc, rc2;
-	cfs_ino_t object = 0;
+	int rc;
+	cfs_ino_t child_ino = 0;
 	struct cfs_fh *parent_fh = NULL;
 	struct cfs_fh *child_fh = NULL;
 	struct kvstore *kvstor = kvstore_get();
@@ -107,46 +107,41 @@ int cfs_creat_ex(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_ino_t *parent,
 	RC_WRAP(kvs_begin_transaction, kvstor, &index);
 
 	RC_WRAP_LABEL(rc, out, cfs_creat, parent_fh, cred, name, mode,
-		      &object);
-	RC_WRAP_LABEL(rc, cleanup, cfs_setattr, cfs_fs, cred, &object, stat_in,
+		      &child_ino);
+	RC_WRAP_LABEL(rc, cleanup, cfs_fh_from_ino,
+		      cfs_fs, &child_ino, &child_fh);
+	RC_WRAP_LABEL(rc, cleanup, cfs_setattr, child_fh, cred, stat_in,
 		      stat_in_flags);
-	RC_WRAP_LABEL(rc, cleanup, cfs_getattr, cfs_fs, cred, &object,
-		      stat_out);
+	memcpy(stat_out, cfs_fh_stat(child_fh), sizeof(struct stat));
 
 	RC_WRAP(kvs_end_transaction, kvstor, &index);
 
-	*newfile = object;
-	object = 0;
+	*newfile = child_ino;
+	child_ino = 0;
 
 cleanup:
-	if (object != 0) {
-		rc2 = cfs_fh_from_ino(cfs_fs, &object, &child_fh);
-		/* Atleast we should be able to construct FH otherwise not
-		 * possible to operate further
-		 */
-		dassert(rc2 == 0);
-
+	if (child_ino != 0) {
 		/* We don't have transactions, so that let's just remove the
-		 * object.
+		 * child_ino.
 		 */
 		(void) cfs_unlink2(parent_fh, child_fh, cred, name);
 		(void) kvs_discard_transaction(kvstor, &index);
 
-		if (child_fh != NULL) {
-			cfs_fh_destroy(child_fh);
-		}
-
-		log_err("cfs_fs=%p parent_ino=%llu object=%llu name=%s rc=%d"
-			"rc2=%d", cfs_fs, *parent, object, name, rc, rc2);
+		log_err("cfs_fs=%p parent_ino=%llu child_ino=%llu name=%s rc=%d",
+			cfs_fs, *parent, child_ino, name, rc);
 	}
 
 out:
+	if (child_fh != NULL) {
+		cfs_fh_destroy_and_dump_stat(child_fh);
+	}
+
 	if (parent_fh != NULL) {
 		cfs_fh_destroy_and_dump_stat(parent_fh);
 	}
 
 	log_debug("cfs_fs=%p parent_ino=%llu new_ino=%llu name=%s rc=%d",
-		  cfs_fs, *parent, rc==0 ? *newfile : object, name, rc);
+		  cfs_fs, *parent, rc==0 ? *newfile : child_ino, name, rc);
 
 	perfc_trace_attr(PEA_CFS_RES_RC, rc);
 	perfc_trace_finii(PERFC_TLS_POP_DONT_VERIFY);
@@ -266,8 +261,8 @@ int cfs_truncate(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_ino_t *ino,
 		new_stat_flags |= (STAT_MTIME_SET | STAT_CTIME_SET);
 	}
 
-	RC_WRAP_LABEL(rc, out, cfs_setattr, cfs_fs, cred, ino, new_stat,
-		      new_stat_flags);
+	RC_WRAP_LABEL(rc, out, cfs_setattr, fh, cred, new_stat,
+			new_stat_flags);
 
 	RC_WRAP_LABEL(rc, out, cfs_ino_to_oid, cfs_fs, ino, &oid);
 	RC_WRAP_LABEL(rc, out, dstore_obj_open, dstore, &oid, &obj);
@@ -279,7 +274,7 @@ out:
 	}
 
 	if (fh != NULL) {
-		cfs_fh_destroy(fh);
+		cfs_fh_destroy_and_dump_stat(fh);
 	}
 
 	return rc;

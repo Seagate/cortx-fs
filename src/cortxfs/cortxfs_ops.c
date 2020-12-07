@@ -78,58 +78,15 @@ int cfs_set_stat(struct kvnode *node)
 	return rc;
 }
 
-static inline int __cfs_getattr(struct cfs_fs *cfs_fs, const cfs_cred_t *cred,
-			 const cfs_ino_t *ino, struct stat *bufstat)
+static inline int __cfs_setattr(struct cfs_fh *fh, cfs_cred_t *cred,
+				struct stat *setstat, int statflag)
 {
-	int rc;
-	struct stat *stat = NULL;
-	struct cfs_fh *fh = NULL;
-
-	dassert(cfs_fs && cred && ino && bufstat);
-
-	/* TODO:Temp_FH_op - to be removed
-	 * Should get rid of creating and destroying FH operation in this
-	 * API when caller pass the valid FH instead of inode number
-	 */
-	RC_WRAP_LABEL(rc, out, cfs_fh_from_ino, cfs_fs, ino, &fh);
-
-	stat = cfs_fh_stat(fh);
-
-	memcpy(bufstat, stat, sizeof(struct stat));
-out:
-	if (fh != NULL) {
-		cfs_fh_destroy_and_dump_stat(fh);
-	}
-
-	log_debug("ino=%d rc=%d", (int)bufstat->st_ino, rc);
-	return rc;
-}
-
-int cfs_getattr(struct cfs_fs *cfs_fs, const cfs_cred_t *cred,
-		const cfs_ino_t *ino, struct stat *bufstat)
-{
-	size_t rc;
-
-	perfc_trace_inii(PFT_CFS_GETATTR, PEM_CFS_TO_NFS);
-
-	rc = __cfs_getattr(cfs_fs, cred, ino, bufstat);
-
-	perfc_trace_attr(PEA_GETATTR_RES_RC, rc);
-	perfc_trace_finii(PERFC_TLS_POP_DONT_VERIFY);
-
-	return rc;
-}
-
-static inline int __cfs_setattr(struct cfs_fs *cfs_fs, cfs_cred_t *cred,
-                         cfs_ino_t *ino, struct stat *setstat, int statflag)
-{
-	struct cfs_fh *fh = NULL;
 	struct stat *stat = NULL;
 	struct timeval t;
 	mode_t ifmt;
 	int rc;
 
-	dassert(cfs_fs && cred && ino && setstat);
+	dassert(cred && setstat && fh);
 
 	if (statflag == 0) {
 		rc = 0;
@@ -139,12 +96,6 @@ static inline int __cfs_setattr(struct cfs_fs *cfs_fs, cfs_cred_t *cred,
 
 	rc = gettimeofday(&t, NULL);
 	dassert(rc == 0);
-
-	/* TODO:Temp_FH_op - to be removed
-	 * Should get rid of creating and destroying FH operation in this
-	 * API when caller pass the valid FH instead of inode number
-	 */
-	RC_WRAP_LABEL(rc, out, cfs_fh_from_ino, cfs_fs, ino, &fh);
 
 	stat = cfs_fh_stat(fh);
 
@@ -193,22 +144,18 @@ static inline int __cfs_setattr(struct cfs_fs *cfs_fs, cfs_cred_t *cred,
 	}
 
 out:
-	if (fh != NULL) {
-		cfs_fh_destroy_and_dump_stat(fh);
-	}
-
 	log_debug("rc=%d", rc);
 	return rc;
 }
 
-int cfs_setattr(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_ino_t *ino,
+int cfs_setattr(struct cfs_fh *fh, cfs_cred_t *cred,
                 struct stat *setstat, int statflag)
 {
     size_t rc;
 
     perfc_trace_inii(PFT_CFS_SETATTR, PEM_CFS_TO_NFS);
 
-    rc = __cfs_setattr(cfs_fs, cred, ino, setstat, statflag);
+    rc = __cfs_setattr(fh, cred, setstat, statflag);
 
     perfc_trace_attr(PEA_SETATTR_RES_RC, rc);
     perfc_trace_finii(PERFC_TLS_POP_DONT_VERIFY);
@@ -219,12 +166,14 @@ static int __cfs_access(struct cfs_fs *cfs_fs, const cfs_cred_t *cred,
 			const cfs_ino_t *ino, int flags)
 {
 	int rc = 0;
-	struct stat stat;
+	struct stat *stat = NULL;;
+	struct cfs_fh *fh = NULL;
 
 	dassert(cred && ino);
 
-	RC_WRAP_LABEL(rc, out, cfs_getattr, cfs_fs, cred, ino, &stat);
-	RC_WRAP_LABEL(rc, out, cfs_access_check, cred, &stat, flags);
+	RC_WRAP_LABEL(rc, out, cfs_fh_from_ino, cfs_fs, ino, &fh);
+	stat = cfs_fh_stat(fh);
+	RC_WRAP_LABEL(rc, out, cfs_access_check, cred, stat, flags);
 out:
 	return rc;
 }
