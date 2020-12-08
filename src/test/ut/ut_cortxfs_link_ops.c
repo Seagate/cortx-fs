@@ -377,7 +377,7 @@ static void create_hardlink_delete_original(void **state)
 	struct stat *stat_out;
 
 	rc = cfs_fh_from_ino(ut_cfs_obj->cfs_fs,
-				&ut_cfs_obj->file_inode, &fh);
+			     &ut_cfs_obj->file_inode, &fh);
 	ut_assert_int_equal(rc, 0);
 	stat_out = cfs_fh_stat(fh);
 
@@ -445,7 +445,7 @@ static void create_hardlink_delete_link(void **state)
 	struct stat *stat_out;
 
 	rc = cfs_fh_from_ino(ut_cfs_obj->cfs_fs,
-				&ut_cfs_obj->file_inode, &fh);
+			     &ut_cfs_obj->file_inode, &fh);
 	ut_assert_int_equal(rc, 0);
 	stat_out = cfs_fh_stat(fh);
 
