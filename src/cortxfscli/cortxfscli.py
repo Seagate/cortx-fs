@@ -30,6 +30,7 @@ import http.client
 import textwrap
 import traceback
 import re
+import hashlib
 
 '''
 cortxfscli tool validation rules:
@@ -642,6 +643,15 @@ class RestClient(Client):
 			request.headers.update(header)
 		else:
 			header = {"Content-Length" : "0"}
+			# Calculating the etag for object which the client wants
+			# to delete.
+			# Todo: Once the etags are added for endpoint delete API
+			# add for request.command endpoint as well.
+			if request.command == 'fs' and request.method == 'DELETE':
+				etag = hashlib.md5(args[0].encode())
+				str_etag = etag.hexdigest()
+				header.update({"If-Match" : str_etag})
+
 			request.headers.update(header)
 
 	def process(self, request):
