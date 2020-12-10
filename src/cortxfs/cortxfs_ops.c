@@ -78,6 +78,38 @@ int cfs_set_stat(struct kvnode *node)
 	return rc;
 }
 
+static inline int __cfs_getattr(struct cfs_fh *cfs_fh, struct stat *bufstat)
+{
+	int rc = 0;
+	struct stat *stat = NULL;
+
+	dassert(cfs_fh && bufstat);
+
+	stat = cfs_fh_stat(cfs_fh);
+	if (stat == NULL) {
+		rc = -1;
+	}
+
+	memcpy(bufstat, stat, sizeof(struct stat));
+
+	log_debug("ino=%d rc=%d", (int)bufstat->st_ino, rc);
+	return rc;
+}
+
+int cfs_getattr(struct cfs_fh *cfs_fh, struct stat *bufstat)
+{
+	size_t rc;
+
+	perfc_trace_inii(PFT_CFS_GETATTR, PEM_CFS_TO_NFS);
+
+	rc = __cfs_getattr(cfs_fh, bufstat);
+
+	perfc_trace_attr(PEA_GETATTR_RES_RC, rc);
+	perfc_trace_finii(PERFC_TLS_POP_DONT_VERIFY);
+
+	return rc;
+}
+
 static inline int __cfs_setattr(struct cfs_fh *fh, cfs_cred_t *cred,
 				struct stat *setstat, int statflag)
 {
