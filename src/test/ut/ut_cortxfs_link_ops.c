@@ -216,14 +216,14 @@ static void create_hardlink(void **state)
 	int rc = 0;
 	char *link_name = "test_hardlink";
 	cfs_ino_t file_inode = 0LL;
+	struct cfs_fh *fh = NULL;
 
 	struct ut_link_env *ut_link_obj = LINK_ENV_FROM_STATE(state);
 	struct ut_cfs_params *ut_cfs_obj = &ut_link_obj->ut_cfs_obj;
 
 	ut_link_obj->link_name = link_name;
 
-	struct stat stat_out;
-	memset(&stat_out, 0, sizeof(stat_out));
+	struct stat *stat_out;
 
 	time_t cur_time;
 	time(&cur_time);
@@ -242,16 +242,20 @@ static void create_hardlink(void **state)
 
 	ut_assert_int_equal(ut_cfs_obj->file_inode, file_inode);
 
-	rc = cfs_getattr(ut_cfs_obj->cfs_fs, &ut_cfs_obj->cred,
-			&ut_cfs_obj->file_inode, &stat_out);
-
+	rc = cfs_fh_from_ino(ut_cfs_obj->cfs_fs,
+				&ut_cfs_obj->file_inode, &fh);
 	ut_assert_int_equal(rc, 0);
+	stat_out = cfs_fh_stat(fh);
 
-	ut_assert_int_equal(stat_out.st_nlink, 2);
+	ut_assert_int_equal(stat_out->st_nlink, 2);
 
-	if(difftime(stat_out.st_ctime, cur_time) < 0) {
+	if(difftime(stat_out->st_ctime, cur_time) < 0) {
 		ut_assert_true(0);
 	} 
+
+	if (fh != NULL) {
+		cfs_fh_destroy(fh);
+	}
 }
 
 /**
@@ -270,6 +274,7 @@ static void create_longname255_hardlink(void **state)
 {
 	int rc = 0;
 	cfs_ino_t file_inode = 0LL;
+	struct cfs_fh *fh = NULL;
 
 	char *long_name = "123456789012345678901234567890123456789012345678901"
 			"123456789012345678901234567890123456789012345678901"
@@ -282,8 +287,7 @@ static void create_longname255_hardlink(void **state)
 
 	ut_link_obj->link_name = long_name;
 
-	struct stat stat_out;
-	memset(&stat_out, 0, sizeof(stat_out));
+	struct stat *stat_out;
 
 	time_t cur_time;
 	time(&cur_time);
@@ -304,16 +308,20 @@ static void create_longname255_hardlink(void **state)
 
 	ut_assert_int_equal(ut_cfs_obj->file_inode, file_inode);
 
-	rc = cfs_getattr(ut_cfs_obj->cfs_fs, &ut_cfs_obj->cred,
-			&ut_cfs_obj->file_inode, &stat_out);
-
+	rc = cfs_fh_from_ino(ut_cfs_obj->cfs_fs,
+				&ut_cfs_obj->file_inode, &fh);
 	ut_assert_int_equal(rc, 0);
+	stat_out = cfs_fh_stat(fh);
 
-	ut_assert_int_equal(stat_out.st_nlink, 2);
+	ut_assert_int_equal(stat_out->st_nlink, 2);
 
-	if(difftime(stat_out.st_ctime, cur_time) < 0) {
+	if(difftime(stat_out->st_ctime, cur_time) < 0) {
 		ut_assert_true(0);
 	} 
+
+	if (fh != NULL) {
+		cfs_fh_destroy(fh);
+	}
 }
 
 /**
@@ -341,6 +349,7 @@ static void create_hardlink_delete_original(void **state)
 	ut_link_obj->link_name = link_name;
 
 	cfs_ino_t link_inode = 0LL;
+	struct cfs_fh *fh = NULL;
 	time_t cur_time;
 
 	rc = cfs_link(ut_cfs_obj->cfs_fs, &ut_cfs_obj->cred,
@@ -365,18 +374,21 @@ static void create_hardlink_delete_original(void **state)
 	
 	time(&cur_time);
 
-	struct stat stat_out;
-	memset(&stat_out, 0, sizeof(stat_out));
+	struct stat *stat_out;
 
-	rc = cfs_getattr(ut_cfs_obj->cfs_fs, &ut_cfs_obj->cred,
-				&ut_cfs_obj->file_inode, &stat_out);
-
+	rc = cfs_fh_from_ino(ut_cfs_obj->cfs_fs,
+			     &ut_cfs_obj->file_inode, &fh);
 	ut_assert_int_equal(rc, 0);
+	stat_out = cfs_fh_stat(fh);
 
-	ut_assert_int_equal(stat_out.st_nlink, 1);
+	ut_assert_int_equal(stat_out->st_nlink, 1);
 
-	if(difftime(stat_out.st_ctime, cur_time) < 0) {
+	if(difftime(stat_out->st_ctime, cur_time) < 0) {
 		ut_assert_true(0);
+	}
+
+	if (fh != NULL) {
+		cfs_fh_destroy(fh);
 	}
 }
 
@@ -406,6 +418,7 @@ static void create_hardlink_delete_link(void **state)
 	time_t cur_time;
 
 	cfs_ino_t file_inode = 0LL;
+	struct cfs_fh *fh = NULL;
 
 	rc = cfs_link(ut_cfs_obj->cfs_fs, &ut_cfs_obj->cred,
 			&ut_cfs_obj->file_inode, &ut_cfs_obj->current_inode,
@@ -429,16 +442,19 @@ static void create_hardlink_delete_link(void **state)
 
 	ut_link_obj->link_name = NULL;
 
-	struct stat stat_out;
-	memset(&stat_out, '0', sizeof(stat_out));
+	struct stat *stat_out;
 
-	rc = cfs_getattr(ut_cfs_obj->cfs_fs, &ut_cfs_obj->cred,
-				&ut_cfs_obj->file_inode, &stat_out);
-
+	rc = cfs_fh_from_ino(ut_cfs_obj->cfs_fs,
+			     &ut_cfs_obj->file_inode, &fh);
 	ut_assert_int_equal(rc, 0);
+	stat_out = cfs_fh_stat(fh);
 
-	if(difftime(stat_out.st_ctime, cur_time) < 0) {
+	if(difftime(stat_out->st_ctime, cur_time) < 0) {
 		ut_assert_true(0);
+	}
+
+	if (fh != NULL) {
+		cfs_fh_destroy(fh);
 	}
 }
 

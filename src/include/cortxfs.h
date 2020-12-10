@@ -295,22 +295,19 @@ struct cfs_inode_attr_key {
 
 /* CORTXFS operations */
 /**
- * Gets attributes for a known inode.
+ * Gets attributes for a known file handle.
  *
  * @note: the call is similar to stat() call in libc. It uses the structure
  * "struct stat" defined in the libC.
- * @param ctx - Filesystem context
- * @param cred - pointer to user's credentials
- * @param ino - pointer to current inode
+ * @param fh - File handle
  * @param stat - [OUT] points to inode's stat
  *
  * @return 0 if successful, a negative "-errno" value in case of failure
  */
-int cfs_getattr(struct cfs_fs *cfs_fs, const cfs_cred_t *cred,
-		const cfs_ino_t *ino, struct stat *stat);
+int cfs_getattr(struct cfs_fh *cfs_fh, struct stat *stat);
 
 /**
- * Sets attributes for a known inode.
+ * Sets attributes for a known file handle.
  *
  * This call uses a struct stat structure as input. This structure will
  * contain the values to be set. More than one can be set in a single call.
@@ -323,15 +320,14 @@ int cfs_getattr(struct cfs_fs *cfs_fs, const cfs_cred_t *cred,
  *  STAT_MTIME_SET: sets mtime
  *  STAT_CTIME_SET: set ctime
  *
- * @param ctx - Filesystem context
+ * @param fh - File handle
  * @param cred - pointer to user's credentials
- * @param ino - pointer to current inode
  * @param setstat - a stat structure containing the new values
  * @param statflags - a bitmap that tells which attributes are to be set
  *
  * @return 0 if successful, a negative "-errno" value in case of failure
  */
-int cfs_setattr(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_ino_t *ino,
+int cfs_setattr(struct cfs_fh *fh, cfs_cred_t *cred,
 		struct stat *setstat, int statflag);
 /**
  * Check is a given user can access an inode.
