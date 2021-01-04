@@ -717,4 +717,6 @@ int cfs_removexattr(struct cfs_fs *cfs_fs, const cfs_cred_t *cred,
  */
 int cfs_remove_all_xattr(struct cfs_fs *cfs_fs, cfs_cred_t *cred, cfs_ino_t *ino);
 
+int cortxfs_register_magic_symbol(void);
+
 #endif

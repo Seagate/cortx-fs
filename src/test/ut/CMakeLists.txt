@@ -95,6 +95,7 @@ target_link_libraries(ut_cortxfs_xattr_dir_ops
 
 target_link_libraries(ut_cortxfs_io_ops
 	ut_cortxfs_helper
+	motr
 )
 
 target_link_libraries(ut_cortxfs_io_bug_ops
