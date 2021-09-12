@@ -30,6 +30,19 @@
 #include <errno.h>
 #include "operation.h"
 #include <cfs_perfc.h>
+#include <m0log.h>
+
+const int  m0trace_common2 = 2812;
+
+int application(void)
+{
+	test_m0log_setup();
+	test_m0log_common1_setup((const void*)&m0trace_common2);
+	my_funct1();
+	//m0log_fini();
+	return 0;
+}
+
 
 int cfs_creat(struct cfs_fh *parent_fh, cfs_cred_t *cred, char *name,
               mode_t mode, cfs_ino_t *newfile_ino)
@@ -167,6 +180,8 @@ static inline ssize_t __cfs_write(struct cfs_fs *cfs_fs, cfs_cred_t *cred,
 		rc = 0;
 		goto out;
 	}
+
+	application();
 
 	/* TODO:Temp_FH_op - to be removed
 	 * Should get rid of creating and destroying FH operation in this

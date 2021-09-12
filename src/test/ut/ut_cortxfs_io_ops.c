@@ -18,8 +18,11 @@
  */
 
 #include "ut_cortxfs_helper.h"
+#include <m0log.h>
 #define BLOCK_SIZE 4096
 #define IO_ENV_FROM_STATE(__state) (*((struct ut_io_env **)__state))
+
+extern const int  m0trace_common2;
 
 struct ut_io_env {
 	struct ut_cfs_params ut_cfs_obj;
@@ -459,12 +462,18 @@ static int io_ops_teardown(void **state)
 	return rc;
 }
 
-int main(void)
+int main(int argc, char *argv[])
 {
 	int rc = 0;
 	char *test_log = "/var/log/cortx/test/ut/ut_cortxfs.log";
 
 	printf("IO tests\n");
+
+	if (argc > 1 && strcmp(argv[1], "decode") == 0)
+	{
+		rc = decoder((const void*)&m0trace_common2, argv[2], argv[3]);
+		return rc;
+	}
 
 	rc = ut_load_config(CONF_FILE);
 	if (rc != 0) {
