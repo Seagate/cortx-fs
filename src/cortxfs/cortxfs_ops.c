@@ -289,6 +289,41 @@ int cfs_readdir(struct cfs_fs *cfs_fs,
 	return rc;
 }
 
+int cfs_readdir_v1(struct cfs_fs *cfs_fs,
+		   const cfs_cred_t *cred, const cfs_ino_t *dir_ino,
+		   cfs_readdir_cb_t cb, void *cb_ctx)
+{
+	int rc;
+	struct cfs_readdir_ctx cb_info = { .cb = cb, .ctx = cb_ctx};
+	struct cfs_fh *fh = NULL;
+	struct stat *stat = NULL;
+	node_id_t *node_id = NULL;
+
+	/* TODO:Temp_FH_op - to be removed
+	 * Should get rid of creating and destroying FH operation in this
+	 * API when caller pass the valid FH instead of inode number
+	 */
+	RC_WRAP_LABEL(rc, out, cfs_fh_from_ino, cfs_fs, dir_ino, &fh);
+	node_id = cfs_node_id_from_fh(fh);
+	stat = cfs_fh_stat(fh);
+
+	RC_WRAP_LABEL(rc, out, cfs_access_check, cred, stat,
+		      CFS_ACCESS_LIST_DIR);
+
+	RC_WRAP_LABEL(rc, out, kvtree_iter_children_v1, cfs_fs->kvtree,
+		      node_id, cfs_readdir_cb, &cb_info);
+
+	RC_WRAP_LABEL(rc, out, cfs_amend_stat, stat, STAT_ATIME_SET);
+
+out:
+	if (fh != NULL ) {
+		cfs_fh_destroy_and_dump_stat(fh);
+	}
+
+	log_debug("cfs_fs=%p dir_ino=%llu rc=%d", cfs_fs, *dir_ino, rc);
+	return rc;
+}
+
 static inline int __cfs_mkdir(struct cfs_fs *cfs_fs, cfs_cred_t *cred,
 			cfs_ino_t *parent, char *name,
 			mode_t mode, cfs_ino_t *newdir)

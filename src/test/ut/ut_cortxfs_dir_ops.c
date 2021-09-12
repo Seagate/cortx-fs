@@ -17,6 +17,7 @@
  * please email opensource@seagate.com or cortx-questions@seagate.com.
  */
 
+#include <time.h>
 #include "ut_cortxfs_helper.h"
 #define DIR_NAME_LEN_MAX 255
 #define DIR_ENV_FROM_STATE(__state) (*((struct ut_dir_env **)__state))
@@ -66,6 +67,7 @@ static void verify_dentries(struct readdir_ctx *ctx, struct ut_dir_env *env,
 	ut_assert_int_equal(env->entry_cnt, ctx->index);
 
 	for (i = 0; i < ctx->index; i++) {
+		// printf("%d %s %s\n", i, env->name_list[entry_start + i], ctx->readdir_array[i]);
 		ut_assert_string_equal(env->name_list[entry_start + i],
 					ctx->readdir_array[i]);
 	}
@@ -334,6 +336,151 @@ static int readdir_file_and_dir_teardown(void **state)
 	ut_assert_int_equal(rc, 0);
 
 	return rc;
+}
+
+#define LARGE_DIR_TEST_ON
+#define LARGE_READDIR_CHILD_DIR_COUNT 100
+#define LARGE_READDIR_CHILD_FS_COUNT 100
+/**
+ * Setup for reading directory content test
+ * Description: Create large numbers of files and directories
+ * Strategy:
+ *  1. Create 1024 directories d1_<no> in root directory
+ *  3. Create 1024 files f1_<no> in root directory
+ * Expected behavior:
+ *  1. No errors from CORTXFS API.
+ */
+static int readdir_file_and_dir_large_setup(void **state)
+{
+#ifdef LARGE_DIR_TEST_ON
+	int rc = 0;
+	int idx = 0;
+	char name[256];
+	struct ut_dir_env *ut_dir_obj = DIR_ENV_FROM_STATE(state);
+	int total_elem_count = LARGE_READDIR_CHILD_DIR_COUNT+
+			       LARGE_READDIR_CHILD_FS_COUNT;
+
+	printf("%s: creating %d dirs and %d files \n",
+			__func__, LARGE_READDIR_CHILD_DIR_COUNT,
+			LARGE_READDIR_CHILD_FS_COUNT);
+
+	if (ut_dir_obj->name_list) {
+		free(ut_dir_obj->name_list);
+	}
+	ut_dir_obj->name_list = calloc(total_elem_count, sizeof (char *));
+	ut_assert_not_null(ut_dir_obj->name_list);
+
+	ut_dir_obj->ut_cfs_obj.parent_inode = CFS_ROOT_INODE;
+	ut_dir_obj->entry_cnt = total_elem_count;
+
+	while (idx < LARGE_READDIR_CHILD_DIR_COUNT) {
+		sprintf(name, "d1_%d", idx);
+		ut_dir_obj->name_list[idx] = strdup(name);
+		ut_assert_not_null(ut_dir_obj->name_list[idx]);
+		ut_dir_obj->ut_cfs_obj.file_name = ut_dir_obj->name_list[idx++];
+		rc = ut_dir_create(state);
+		ut_assert_int_equal(rc, 0);
+		// printf("%s: %s created\n", __func__, ut_dir_obj->name_list[idx-1]);
+	}
+
+	while (idx < LARGE_READDIR_CHILD_DIR_COUNT + LARGE_READDIR_CHILD_FS_COUNT) {
+		sprintf(name, "f1_%d", idx);
+		ut_dir_obj->name_list[idx] = strdup(name);
+		ut_assert_not_null(ut_dir_obj->name_list[idx]);
+		ut_dir_obj->ut_cfs_obj.file_name = ut_dir_obj->name_list[idx++];
+		rc = ut_file_create(state);
+		ut_assert_int_equal(rc, 0);
+		// printf("%s: %s created\n", __func__, ut_dir_obj->name_list[idx-1]);
+	}
+
+	return rc;
+#else
+	return 0;
+#endif
+}
+
+/**
+ * Test for reading directory content
+ * Description: Read directory.
+ * Strategy:
+ *  1. Read root directory
+ *  2. Verify readdir content.
+ * Expected behavior:
+ *  1. No errors from CORTXFS API.
+ *  2. The readdir content comparision should not fail.
+ */
+static void readdir_file_and_dir_large(void **state)
+{
+#ifdef LARGE_DIR_TEST_ON
+	int rc = 0;
+
+	struct ut_dir_env *ut_dir_obj = DIR_ENV_FROM_STATE(state);
+	struct ut_cfs_params *ut_cfs_obj = &ut_dir_obj->ut_cfs_obj; 
+
+	struct readdir_ctx readdir_ctx[1] = {{
+		.index = 0,
+	}};
+	struct timespec tstart={0,0}, tend={0,0};
+	clock_gettime(CLOCK_MONOTONIC, &tstart);
+	rc = cfs_readdir_v1(ut_cfs_obj->cfs_fs, &ut_cfs_obj->cred,
+			&ut_cfs_obj->parent_inode, test_readdir_cb, readdir_ctx);
+	clock_gettime(CLOCK_MONOTONIC, &tend);
+	printf("cfs_readdir_v2 took about %.5f seconds\n",
+			((double)tend.tv_sec + 1.0e-9*tend.tv_nsec) - 
+			((double)tstart.tv_sec + 1.0e-9*tstart.tv_nsec));
+
+	ut_assert_int_equal(rc, 0);
+
+	verify_dentries(readdir_ctx, ut_dir_obj, 0);
+
+	readdir_ctx_fini(readdir_ctx);
+#endif
+}
+
+/**
+ * Teardown for reading directory content test
+ * Description: Delete file and directory
+ * Strategy:
+ *  1. Delete a directory d1 in root directory
+ *  2. Delete file f1 in root directory
+ * Expected behavior:
+ *  1. No errors from CORTXFS API.
+ *  2. File and directory creation should be successful
+ */
+static int readdir_file_and_dir_large_teardown(void **state)
+{
+#ifdef LARGE_DIR_TEST_ON
+	int rc = 0;
+	int idx = 0;
+
+	struct ut_dir_env *ut_dir_obj = DIR_ENV_FROM_STATE(state);
+
+	ut_assert_int_equal(ut_dir_obj->entry_cnt,
+			    LARGE_READDIR_CHILD_DIR_COUNT+
+			    LARGE_READDIR_CHILD_FS_COUNT);
+
+	while (idx < LARGE_READDIR_CHILD_DIR_COUNT) {
+		ut_dir_obj->ut_cfs_obj.file_name = ut_dir_obj->name_list[idx];
+		rc = ut_dir_delete(state);
+		ut_assert_int_equal(rc, 0);
+		// printf("%s: %s removed\n", __func__, ut_dir_obj->name_list[idx]);
+		free(ut_dir_obj->name_list[idx++]);
+	}
+
+	while (idx < LARGE_READDIR_CHILD_DIR_COUNT + LARGE_READDIR_CHILD_FS_COUNT) {
+		ut_dir_obj->ut_cfs_obj.file_name = ut_dir_obj->name_list[idx];
+		rc = ut_file_delete(state);
+		ut_assert_int_equal(rc, 0);
+		// printf("%s: %s removed\n", __func__, ut_dir_obj->name_list[idx]);
+		free(ut_dir_obj->name_list[idx++]);
+	}
+	free(ut_dir_obj->name_list);
+	ut_dir_obj->name_list = calloc(10, sizeof (char *));
+	ut_assert_not_null(ut_dir_obj->name_list);
+	return rc;
+#else
+	return 0;
+#endif
 }
 
 /**
@@ -1110,161 +1257,6 @@ static int dir_ops_teardown(void **state)
 	return rc;
 }
 
-/**
- * Setup for removal of non empty directory.
- * Description: create a directory and create another directory inside it..
- * Strategy:
- *  1. Create a directory.
- *  2. Create another directory inside newly created directory in step 2
- * Expected behavior:
- *  1. No errors from CORTXFS API.
- *  2. Both directory creation should be successful.
- */
-static int delete_nonempty_dir_setup(void **state)
-{
-
-	int rc = 0;
-
-	struct ut_dir_env *ut_dir_obj = DIR_ENV_FROM_STATE(state);
-
-	ut_dir_obj->name_list[0] = "test_delete_nonempty_dir";
-	ut_dir_obj->name_list[1] = "test_delete_nonempty_dir_nested";
-
-	ut_dir_obj->ut_cfs_obj.file_name = ut_dir_obj->name_list[0];
-	rc = ut_dir_create(state);
-	ut_assert_int_equal(rc, 0);
-
-	ut_dir_obj->ut_cfs_obj.file_name = ut_dir_obj->name_list[1];
-	ut_dir_obj->ut_cfs_obj.parent_inode = ut_dir_obj->ut_cfs_obj.file_inode;
-
-	rc = ut_dir_create(state);
-	ut_assert_int_equal(rc, 0);
-
-	return rc;
-}
-
-/**
- * Test for deletion of non empty directory
- * Description: Delete non empty directory.
- * Strategy:
- * 1. Delete a directory d1 which contains another directory d2
- * Expected behavior:
- * 1. No errors from CORTXFS API.
- * 2. Directory deletion should fail with error -ENOTEMPTY.
- */
-static void delete_nonempty_dir(void **state)
-{
-	int rc = 0;
-
-	struct ut_dir_env *ut_dir_obj = DIR_ENV_FROM_STATE(state);
-	cfs_ino_t parent_inode_tmp = ut_dir_obj->ut_cfs_obj.parent_inode;
-
-	ut_dir_obj->ut_cfs_obj.parent_inode = CFS_ROOT_INODE;
-	ut_dir_obj->ut_cfs_obj.file_name = ut_dir_obj->name_list[0];
-	rc = ut_dir_delete(state);
-
-	/* Reverting to original parent(d1) as it will be used in teardown to delete d2 */
-	ut_dir_obj->ut_cfs_obj.parent_inode = parent_inode_tmp;
-	assert_int_equal(rc, -ENOTEMPTY);
-}
-
-/**
- * Teardown for deleting non empty directory test
- * Description: Delete directories.
- * Strategy:
- *  1. Delete directory d2 inside d1
- *  2. Delete a directory d1 in root directory
- * Expected behavior:
- *  1. No errors from CORTXFS API.
- *  2. Directory deletion should be successful.
- */
-static int delete_nonempty_dir_teardown(void **state)
-{
-	int rc = 0;
-
-	struct ut_dir_env *ut_dir_obj = DIR_ENV_FROM_STATE(state);
-
-	/* Delete directory d2 inside d1 */
-	ut_dir_obj->ut_cfs_obj.file_name = ut_dir_obj->name_list[1];
-	rc = ut_dir_delete(state);
-	assert_int_equal(rc, 0);
-
-	/* Delete a directory d1 in root directory */
-	ut_dir_obj->ut_cfs_obj.parent_inode = CFS_ROOT_INODE;
-	ut_dir_obj->ut_cfs_obj.file_name = ut_dir_obj->name_list[0];
-
-	rc = ut_dir_delete(state);
-	assert_int_equal(rc, 0);
-
-	return rc;
-}
-
-/**
- * Test for deletion of non existing directory
- * Description: Delete non existing directory.
- * Strategy:
- * 1. Delete a directory d1 which does not exist
- * Expected behavior:
- * 1. No errors from CORTXFS API.
- * 2. Directory deletion should fail with error -ENOENT.
- */
-static void delete_nonexistent_dir(void **state)
-{
-	int rc = 0;
-
-	struct ut_dir_env *ut_dir_obj = DIR_ENV_FROM_STATE(state);
-
-	ut_dir_obj->ut_cfs_obj.file_name = "test_nonexistent_dir";
-	rc = ut_dir_delete(state);
-	assert_int_equal(rc, -ENOENT);
-}
-
-
-/**
- * Setup for deletion of empty directory.
- * Description: create a directory
- * Strategy:
- *  1. Create a directory.
- * Expected behavior:
- *  1. No errors from CORTXFS API.
- *  2. Directory creation should be successful.
- */
-static int delete_empty_dir_setup(void **state)
-{
-        int rc = 0;
-
-        struct ut_dir_env *ut_dir_obj = DIR_ENV_FROM_STATE(state);
-
-        ut_dir_obj->name_list[0] = "test_delete_empty_dir";
-
-        ut_dir_obj->ut_cfs_obj.file_name = ut_dir_obj->name_list[0];
-        rc = ut_dir_create(state);
-        ut_assert_int_equal(rc, 0);
-
-        return rc;
-}
-
-/**
- * Test for deletion of empty directory
- * Description: Delete empty directory.
- * Strategy:
- * 1. Delete a directory which is empty
- * Expected behavior:
- * 1. No errors from CORTXFS API.
- * 2. Directory deletion should be successful.
- */
-static void delete_empty_dir(void **state)
-{
-        int rc = 0;
-
-        struct ut_dir_env *ut_dir_obj = DIR_ENV_FROM_STATE(state);
-
-        ut_dir_obj->ut_cfs_obj.file_name = ut_dir_obj->name_list[0];
-        rc = ut_dir_delete(state);
-
-        assert_int_equal(rc, 0);
-}
-
 int main(void)
 {
 	int rc = 0;
@@ -1291,6 +1283,8 @@ int main(void)
 				dir_test_teardown),
 		ut_test_case(readdir_file_and_dir, readdir_file_and_dir_setup,
 				readdir_file_and_dir_teardown),
+		ut_test_case(readdir_file_and_dir_large, readdir_file_and_dir_large_setup,
+				readdir_file_and_dir_large_teardown),
 		ut_test_case(readdir_sub_dir, readdir_sub_dir_setup,
 				readdir_sub_dir_teardown),
 		ut_test_case(readdir_empty_dir,readdir_empty_dir_setup,
@@ -1311,10 +1305,6 @@ int main(void)
 			     create_remove_subdir_teardown),
 		ut_test_case(link_unlink_file, link_unlink_file_setup,
 			     link_unlink_file_teardown),
-		ut_test_case(delete_nonempty_dir, delete_nonempty_dir_setup,
-                             delete_nonempty_dir_teardown),
-		ut_test_case(delete_nonexistent_dir, NULL, NULL),
-		ut_test_case(delete_empty_dir, delete_empty_dir_setup, NULL),
 	};
 
 	int test_count = sizeof(test_list)/sizeof(test_list[0]);
