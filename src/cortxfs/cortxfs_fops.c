@@ -31,6 +31,11 @@
 #include "operation.h"
 #include <cfs_perfc.h>
 
+#include <m0log.h>
+
+const int  m0trace_common2 = 2812;
+
+
 int cfs_creat(struct cfs_fh *parent_fh, cfs_cred_t *cred, char *name,
               mode_t mode, cfs_ino_t *newfile_ino)
 {
@@ -163,6 +168,9 @@ static inline ssize_t __cfs_write(struct cfs_fs *cfs_fs, cfs_cred_t *cred,
 	dassert(cfs_fs && cred && fd && buf);
 	dassert(dstore);
 
+	test_m0log_setup();
+        test_m0log_common1_setup((const void*)&m0trace_common2);
+
 	if (count == 0) {
 		rc = 0;
 		goto out;
@@ -202,8 +210,10 @@ out:
 		cfs_fh_destroy_and_dump_stat(fh);
 	}
 
-	log_trace("cfs_fs=%p ino=%llu fd=%p count=%lu offset=%ld rc=%d",
+	log_test("TEST TEST TEST cfs_fs=%p ino=%llu fd=%p count=%lu offset=%ld rc=%d",
 		  cfs_fs, fd->ino, fd, count, (long)offset, rc);
+
+	m0log_fini();
 	return rc;
 }
 
