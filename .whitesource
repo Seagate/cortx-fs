@@ -4,11 +4,11 @@
     "configExternalURL": "",
     "projectToken": "",
     "enableLicenseViolations": true,
-    "baseBranches": []
+    "baseBranches": ["main"]
   },
   "checkRunSettings": {
     "licenseCheckRunConclusionLevel": "failure",
-    "vulnerableCheckRunConclusionLevel": "none",
+    "vulnerableCheckRunConclusionLevel": "success",
     "displayMode": "diff"
   },
   "issueSettings": {
